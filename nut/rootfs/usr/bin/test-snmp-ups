@@ -1,0 +1,172 @@
+#!/command/with-contenv bashio
+# ==============================================================================
+# Home Assistant Community Add-on: Network UPS Tools
+# Test script for SNMP-based UPS devices (like APC with NMC2)
+# ==============================================================================
+
+bashio::log.info "SNMP UPS Connection Test"
+bashio::log.info "========================"
+
+# Find SNMP devices in configuration
+found_snmp=false
+for device in $(bashio::config "devices|keys"); do
+    driver=$(bashio::config "devices[${device}].driver")
+    if [[ "${driver}" == "snmp-ups" ]]; then
+        found_snmp=true
+        upsname=$(bashio::config "devices[${device}].name")
+        upshost=$(bashio::config "devices[${device}].port")
+        
+        bashio::log.info ""
+        bashio::log.info "Found SNMP UPS configuration:"
+        bashio::log.info "  Name: ${upsname}"
+        bashio::log.info "  Host: ${upshost}"
+        
+        # Extract SNMP settings from config
+        community="public"
+        version="v1"
+        for configitem in $(bashio::config "devices[${device}].config"); do
+            if [[ "${configitem}" =~ community[[:space:]]*=[[:space:]]*\"?([^\"]+)\"? ]]; then
+                community="${BASH_REMATCH[1]}"
+            fi
+            if [[ "${configitem}" =~ snmp_version[[:space:]]*=[[:space:]]*\"?([^\"]+)\"? ]]; then
+                version="${BASH_REMATCH[1]}"
+            fi
+        done
+        
+        bashio::log.info "  SNMP Version: ${version}"
+        bashio::log.info "  Community: ${community}"
+        
+        # Test network connectivity
+        bashio::log.info ""
+        bashio::log.info "Testing network connectivity..."
+        if ping -c 1 -W 2 "${upshost}" > /dev/null 2>&1; then
+            bashio::log.info "✓ Device is reachable at ${upshost}"
+        else
+            bashio::log.error "✗ Cannot ping device at ${upshost}"
+            bashio::log.error "  Check network configuration and firewall settings"
+            continue
+        fi
+        
+        # Test SNMP port
+        bashio::log.info ""
+        bashio::log.info "Testing SNMP port (161/UDP)..."
+        if timeout 2 bash -c "echo > /dev/udp/${upshost}/161" 2>/dev/null; then
+            bashio::log.info "✓ SNMP port appears to be open"
+        else
+            bashio::log.warning "⚠ Cannot verify SNMP port (UDP test inconclusive)"
+        fi
+        
+        # Test SNMP connectivity if snmpwalk is available
+        if command -v snmpwalk >/dev/null 2>&1; then
+            bashio::log.info ""
+            bashio::log.info "Testing SNMP connectivity..."
+            
+            # Test based on version
+            case "${version}" in
+                v1|v2c)
+                    # Test SNMP v1/v2c
+                    if timeout 5 snmpwalk -v ${version//v/} -c "${community}" "${upshost}" .1.3.6.1.2.1.1.1.0 2>&1 | grep -q "STRING"; then
+                        bashio::log.info "✓ SNMP connection successful"
+                        
+                        # Try to get UPS specific info (APC OID)
+                        bashio::log.info ""
+                        bashio::log.info "Querying UPS information..."
+                        
+                        # UPS Model
+                        model=$(snmpget -v ${version//v/} -c "${community}" -Oqv "${upshost}" .1.3.6.1.4.1.318.1.1.1.1.1.1.0 2>/dev/null | tr -d '"')
+                        [[ -n "${model}" ]] && bashio::log.info "  Model: ${model}"
+                        
+                        # UPS Name
+                        name=$(snmpget -v ${version//v/} -c "${community}" -Oqv "${upshost}" .1.3.6.1.4.1.318.1.1.1.1.1.2.0 2>/dev/null | tr -d '"')
+                        [[ -n "${name}" ]] && bashio::log.info "  Name: ${name}"
+                        
+                        # Firmware version
+                        firmware=$(snmpget -v ${version//v/} -c "${community}" -Oqv "${upshost}" .1.3.6.1.4.1.318.1.1.1.1.2.1.0 2>/dev/null | tr -d '"')
+                        [[ -n "${firmware}" ]] && bashio::log.info "  Firmware: ${firmware}"
+                        
+                        # Battery status
+                        battery=$(snmpget -v ${version//v/} -c "${community}" -Oqv "${upshost}" .1.3.6.1.4.1.318.1.1.1.2.2.1.0 2>/dev/null)
+                        if [[ -n "${battery}" ]]; then
+                            case "${battery}" in
+                                1) bashio::log.info "  Battery Status: Unknown" ;;
+                                2) bashio::log.info "  Battery Status: Normal" ;;
+                                3) bashio::log.info "  Battery Status: Low" ;;
+                                4) bashio::log.info "  Battery Status: Depleted" ;;
+                            esac
+                        fi
+                        
+                        # Battery capacity
+                        capacity=$(snmpget -v ${version//v/} -c "${community}" -Oqv "${upshost}" .1.3.6.1.4.1.318.1.1.1.2.2.1.0 2>/dev/null)
+                        [[ -n "${capacity}" ]] && bashio::log.info "  Battery Capacity: ${capacity}%"
+                        
+                    else
+                        bashio::log.error "✗ SNMP connection failed"
+                        bashio::log.error "  Check SNMP settings:"
+                        bashio::log.error "  - Is SNMP enabled on the device?"
+                        bashio::log.error "  - Is community string '${community}' correct?"
+                        bashio::log.error "  - Is SNMP version ${version} supported?"
+                    fi
+                    ;;
+                v3)
+                    bashio::log.warning "SNMPv3 testing requires additional authentication parameters"
+                    bashio::log.info "Please verify SNMPv3 configuration manually"
+                    ;;
+            esac
+        else
+            bashio::log.warning "snmpwalk not available for testing"
+            bashio::log.info "SNMP tools can be installed for debugging if needed"
+        fi
+        
+        # Check if upsd is running and try to query the device
+        bashio::log.info ""
+        bashio::log.info "Checking NUT status..."
+        if pgrep -x "upsd" > /dev/null; then
+            bashio::log.info "✓ NUT upsd is running"
+            
+            # Try to query through upsc
+            if command -v upsc >/dev/null 2>&1; then
+                bashio::log.info ""
+                bashio::log.info "Querying UPS through NUT..."
+                output=$(timeout 5 upsc "${upsname}@localhost" 2>&1)
+                if echo "${output}" | grep -q "ups.status"; then
+                    bashio::log.info "✓ Successfully connected to UPS via NUT"
+                    echo "${output}" | grep -E "^(ups\.|battery\.|input\.|output\.)" | head -20
+                else
+                    bashio::log.warning "Could not query UPS through NUT"
+                    bashio::log.warning "Check driver configuration and logs"
+                fi
+            fi
+        else
+            bashio::log.error "✗ NUT upsd is not running"
+        fi
+    fi
+done
+
+if ! ${found_snmp}; then
+    bashio::log.error "No SNMP UPS configuration found"
+    bashio::log.info ""
+    bashio::log.info "To configure an SNMP UPS (like APC with NMC2), add:"
+    bashio::log.info ""
+    bashio::log.info "devices:"
+    bashio::log.info "  - name: smart_ups"
+    bashio::log.info "    driver: snmp-ups"
+    bashio::log.info "    port: YOUR_NMC_IP"
+    bashio::log.info "    config:"
+    bashio::log.info "      - community = \"private\""
+    bashio::log.info "      - snmp_version = \"v1\""
+fi
+
+bashio::log.info ""
+bashio::log.info "========================"
+bashio::log.info "Test complete!"
+
+# Additional tips
+if ${found_snmp}; then
+    bashio::log.info ""
+    bashio::log.info "Tips for SNMP UPS devices:"
+    bashio::log.info "- Default SNMP community strings are often 'public' (read) and 'private' (write)"
+    bashio::log.info "- Always change default community strings for security"
+    bashio::log.info "- Consider using SNMPv3 for encrypted communication"
+    bashio::log.info "- Check firewall rules - SNMP uses UDP port 161"
+    bashio::log.info "- For APC devices, update NMC firmware for best compatibility"
+fi

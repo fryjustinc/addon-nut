@@ -14,11 +14,24 @@ RUN \
         nut-powerman=2.8.1-5 \
         powerman \
         usbutils=1:018-2 \
+        expect \
+        telnet \
+        snmp \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy root filesystem
 COPY rootfs /
+
+# Make scripts executable
+RUN chmod +x /usr/bin/notify \
+    && chmod +x /usr/bin/shutdownhost \
+    && chmod +x /usr/bin/test-powerman \
+    && chmod +x /usr/bin/test-apc-ap7900b \
+    && chmod +x /usr/bin/test-snmp-ups \
+    && chmod +x /etc/services.d/*/run \
+    && chmod +x /etc/services.d/*/finish \
+    && chmod +x /etc/cont-init.d/*.sh
 
 # Build arguments
 ARG BUILD_ARCH

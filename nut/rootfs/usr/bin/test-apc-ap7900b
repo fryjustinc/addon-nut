@@ -1,0 +1,129 @@
+#!/command/with-contenv bashio
+# ==============================================================================
+# Home Assistant Community Add-on: Network UPS Tools
+# APC AP7900B PDU Test Script
+# ==============================================================================
+
+bashio::log.info "APC AP7900B PDU Connection Test"
+bashio::log.info "================================"
+
+# Check if PowerMan is configured
+if ! bashio::config.has_value 'powerman.enabled' || ! bashio::config.true 'powerman.enabled'; then
+    bashio::log.error "PowerMan is not enabled. Please enable it in the configuration."
+    exit 1
+fi
+
+# Find APC PDU configuration
+found_apc=false
+for pdu in $(bashio::config "powerman.devices|keys"); do
+    pdutype=$(bashio::config "powerman.devices[${pdu}].type")
+    if [[ "${pdutype}" == "apc" ]] || [[ "${pdutype}" == "apc7900b" ]] || [[ "${pdutype}" == "ap7900b" ]]; then
+        found_apc=true
+        pduname=$(bashio::config "powerman.devices[${pdu}].name")
+        pduhost=$(bashio::config "powerman.devices[${pdu}].host")
+        
+        bashio::log.info "Found APC PDU configuration:"
+        bashio::log.info "  Name: ${pduname}"
+        bashio::log.info "  Host: ${pduhost}"
+        bashio::log.info "  Type: ${pdutype}"
+        
+        # Test network connectivity
+        bashio::log.info ""
+        bashio::log.info "Testing network connectivity..."
+        if ping -c 1 -W 2 "${pduhost}" > /dev/null 2>&1; then
+            bashio::log.info "✓ PDU is reachable at ${pduhost}"
+        else
+            bashio::log.error "✗ Cannot ping PDU at ${pduhost}"
+            bashio::log.error "  Check network configuration and firewall settings"
+        fi
+        
+        # Test telnet port
+        bashio::log.info ""
+        bashio::log.info "Testing telnet port (23)..."
+        if timeout 2 bash -c "echo > /dev/tcp/${pduhost}/23" 2>/dev/null; then
+            bashio::log.info "✓ Telnet port 23 is open"
+        else
+            bashio::log.error "✗ Cannot connect to telnet port 23"
+            bashio::log.error "  Ensure telnet is enabled in the PDU's network settings"
+        fi
+        
+        # Check if PowerMan daemon is running
+        bashio::log.info ""
+        bashio::log.info "Checking PowerMan daemon..."
+        if pgrep -x "powermand" > /dev/null; then
+            bashio::log.info "✓ PowerMan daemon is running"
+            
+            # Try to query the PDU through PowerMan
+            if command -v powerman >/dev/null 2>&1; then
+                bashio::log.info ""
+                bashio::log.info "Querying PDU through PowerMan..."
+                
+                # List nodes
+                powerman -h localhost:10101 -l 2>&1 | grep -q "${pduname}" && {
+                    bashio::log.info "✓ PDU '${pduname}' is registered in PowerMan"
+                    
+                    # Try to query status
+                    bashio::log.info ""
+                    bashio::log.info "Attempting to query outlet status..."
+                    powerman -h localhost:10101 -q "${pduname}" 2>&1 | head -10
+                } || {
+                    bashio::log.error "✗ PDU '${pduname}' not found in PowerMan"
+                    bashio::log.error "  Check PowerMan configuration and logs"
+                }
+            fi
+        else
+            bashio::log.error "✗ PowerMan daemon is not running"
+            bashio::log.error "  Check the add-on logs for startup errors"
+        fi
+        
+        # Check NUT configuration
+        bashio::log.info ""
+        bashio::log.info "Checking NUT configuration..."
+        for device in $(bashio::config "devices|keys"); do
+            if bashio::config.equals "devices[${device}].driver" "powerman"; then
+                upsname=$(bashio::config "devices[${device}].name")
+                pmdevice=$(bashio::config "devices[${device}].powerman_device" || echo "")
+                
+                if [[ "${pmdevice}" == "${pduname}" ]] || [[ -z "${pmdevice}" ]]; then
+                    bashio::log.info "✓ Found NUT device '${upsname}' configured for PowerMan"
+                    
+                    # Try to query through upsc
+                    if command -v upsc >/dev/null 2>&1; then
+                        bashio::log.info ""
+                        bashio::log.info "Querying PDU through NUT (upsc)..."
+                        upsc "${upsname}@localhost" 2>&1 | head -20 || {
+                            bashio::log.warning "Could not query device through NUT"
+                            bashio::log.warning "This might be normal if the PDU is still initializing"
+                        }
+                    fi
+                fi
+            fi
+        done
+    fi
+done
+
+if ! ${found_apc}; then
+    bashio::log.error "No APC PDU configuration found"
+    bashio::log.info ""
+    bashio::log.info "To configure an APC AP7900B, add this to your configuration:"
+    bashio::log.info ""
+    bashio::log.info "powerman:"
+    bashio::log.info "  enabled: true"
+    bashio::log.info "  devices:"
+    bashio::log.info "    - name: apc_pdu"
+    bashio::log.info "      type: apc"
+    bashio::log.info "      host: YOUR_PDU_IP"
+    bashio::log.info "      username: apc"
+    bashio::log.info "      password: YOUR_PASSWORD"
+    bashio::log.info "      nodes: \"outlet[1-8]\""
+    bashio::log.info ""
+    bashio::log.info "devices:"
+    bashio::log.info "  - name: pdu"
+    bashio::log.info "    driver: powerman"
+    bashio::log.info "    port: \"powerman://localhost:10101\""
+    bashio::log.info "    powerman_device: apc_pdu"
+fi
+
+bashio::log.info ""
+bashio::log.info "================================"
+bashio::log.info "Test complete!"

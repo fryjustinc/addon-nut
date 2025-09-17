@@ -1,0 +1,222 @@
+# Home Assistant NUT Addon - Complete APC Infrastructure Example
+# 
+# This configuration example shows how to monitor:
+# 1. APC SMT2200RM2UC UPS with NMC2 (Network Management Card)
+# 2. APC AP7900B PDU (8-outlet switched rack PDU)
+#
+# This setup is common in small to medium server rooms where you have:
+# - UPS providing battery backup
+# - PDU for outlet-level control and monitoring
+# - Both devices network-accessible for remote management
+
+# ===============================================
+# NUT Users Configuration
+# ===============================================
+users:
+  - username: nutadmin
+    password: StrongPassword123!  # CHANGE THIS!
+    instcmds:
+      - all
+    actions:
+      - set
+      - fsd
+    upsmon: master
+
+# ===============================================
+# Device Configuration
+# ===============================================
+devices:
+  # ---------------------------------------------
+  # APC SMT2200RM2UC with NMC2 (SNMP)
+  # ---------------------------------------------
+  # The SMT2200RM2UC is a 2200VA/1980W rack-mount UPS
+  # NMC2 provides network management via SNMP
+  - name: apc_ups
+    driver: snmp-ups
+    port: 192.168.1.50  # IP address of the NMC2 card
+    config:
+      - community = "private"  # SNMP community string (change from default!)
+      - snmp_version = "v1"    # or "v2c" or "v3" depending on your setup
+      - pollfreq = 15          # Poll every 15 seconds
+      - desc = "APC Smart-UPS 2200 Rack Mount"
+      # Optional: For SNMP v3 (more secure):
+      # - snmp_version = "v3"
+      # - secLevel = "authPriv"
+      # - secName = "nutmon"
+      # - authPassword = "auth_pass_phrase"
+      # - privPassword = "priv_pass_phrase"
+      # - authProtocol = "SHA"
+      # - privProtocol = "AES"
+    powervalue: 1  # This UPS powers the system
+
+  # ---------------------------------------------
+  # APC AP7900B PDU (via PowerMan)
+  # ---------------------------------------------
+  - name: apc_pdu
+    driver: powerman
+    port: "powerman://localhost:10101"
+    config: []
+    powerman_device: "rack_pdu"
+    powervalue: 0  # Monitor only, doesn't trigger shutdown
+
+# ===============================================
+# PowerMan Configuration (for PDU)
+# ===============================================
+powerman:
+  enabled: true
+  devices:
+    - name: rack_pdu
+      type: apc
+      host: 192.168.1.75  # IP address of AP7900B
+      username: apc       # PDU username
+      password: apc       # PDU password (CHANGE THIS!)
+      nodes: "outlet[1-8]"
+
+# ===============================================
+# Addon Settings
+# ===============================================
+mode: netserver
+shutdown_host: "false"  # Set to "true" for production
+list_usb_devices: false
+log_level: info
+
+# ===============================================
+# SETUP INSTRUCTIONS
+# ===============================================
+
+# FOR THE APC SMT2200RM2UC WITH NMC2:
+# ------------------------------------
+# 1. Install the NMC2 card in the UPS SmartSlot
+# 2. Configure network settings:
+#    - Via serial: Connect to NMC2 serial port (9600,8,N,1)
+#    - Or via DHCP: Find assigned IP and access web interface
+# 3. Set static IP address:
+#    - Web UI: Configuration > Network > TCP/IP
+#    - Set IPv4 Configuration to "Manual"
+#    - Enter IP: 192.168.1.50 (or your choice)
+# 4. Configure SNMP:
+#    - Web UI: Configuration > Network > SNMPv1
+#    - Enable SNMPv1 Access
+#    - Change Read Community from "public" to something secure
+#    - Change Write Community from "private" to something secure
+#    - For better security, use SNMPv3 instead
+# 5. Update firmware:
+#    - Download from APC website (requires free account)
+#    - Web UI: Administration > Firmware Update
+#    - Recommended: AOS 6.8.2 or later, NMC2 firmware 7.1.0 or later
+
+# FOR THE APC AP7900B PDU:
+# ------------------------
+# 1. Configure network settings:
+#    - Access via serial or web interface
+#    - Set static IP: 192.168.1.75 (or your choice)
+# 2. Enable telnet:
+#    - Web UI: Network > TCP/IP > Telnet Enable
+# 3. Change credentials:
+#    - Default is apc/apc - CHANGE IMMEDIATELY
+#    - Web UI: Security > User Management
+# 4. Update firmware if needed
+
+# ===============================================
+# HOME ASSISTANT INTEGRATION
+# ===============================================
+# 1. Start the addon with this configuration
+# 2. Check addon logs for any errors
+# 3. In Home Assistant:
+#    - Settings > Devices & Services
+#    - Add Integration > Network UPS Tools (NUT)
+#    - Host: a0d7b954-nut
+#    - Port: 3493
+#    - Username: nutadmin
+#    - Password: (your password from above)
+# 4. Two devices should appear:
+#    - apc_ups (SMT2200RM2UC)
+#    - apc_pdu (AP7900B)
+
+# ===============================================
+# AVAILABLE SENSORS (typical)
+# ===============================================
+# From SMT2200RM2UC:
+# - Status (OL, OB, LB, etc.)
+# - Battery charge percentage
+# - Battery runtime remaining
+# - Input/Output voltage
+# - Load percentage
+# - Temperature
+# - Last transfer reason
+# - Self-test results
+
+# From AP7900B:
+# - PDU status
+# - Individual outlet status (1-8)
+# - Current draw (if supported)
+
+# ===============================================
+# AUTOMATION EXAMPLES
+# ===============================================
+# You can create automations like:
+#
+# 1. Notify when on battery:
+#    trigger: state.apc_ups.status changes to "OB"
+#    action: send notification "UPS on battery power"
+#
+# 2. Graceful shutdown at low battery:
+#    trigger: state.apc_ups.battery_charge < 20
+#    action: shutdown non-critical servers
+#
+# 3. PDU outlet scheduling:
+#    trigger: time = 22:00
+#    action: turn off specific PDU outlets
+#
+# 4. Temperature monitoring:
+#    trigger: state.apc_ups.temperature > 40
+#    action: send critical alert
+
+# ===============================================
+# TESTING COMMANDS
+# ===============================================
+# Test SNMP connectivity to UPS:
+#   snmpwalk -v1 -c private 192.168.1.50 .1.3.6.1.4.1.318
+#
+# Test NUT UPS status:
+#   upsc apc_ups@localhost
+#
+# Test PDU connectivity:
+#   /usr/bin/test-apc-ap7900b
+#
+# Test PowerMan PDU status:
+#   powerman -h localhost:10101 -q rack_pdu
+#
+# List all NUT variables:
+#   upsc apc_ups@localhost | grep -E "^(battery|input|output|ups)"
+
+# ===============================================
+# TROUBLESHOOTING
+# ===============================================
+# Issue: Can't connect to UPS via SNMP
+# - Verify NMC2 IP address (ping 192.168.1.50)
+# - Check SNMP is enabled on NMC2
+# - Verify community string matches
+# - Check firewall rules (port 161/UDP)
+#
+# Issue: Wrong or missing UPS values
+# - Update NMC2 firmware
+# - Try different SNMP version
+# - Check MIB compatibility
+#
+# Issue: PDU not responding
+# - Check telnet is enabled
+# - Verify credentials
+# - Test with: telnet 192.168.1.75 23
+
+# ===============================================
+# SECURITY NOTES
+# ===============================================
+# 1. Change ALL default passwords immediately
+# 2. Use SNMPv3 instead of v1/v2c if possible
+# 3. Restrict SNMP access by IP if possible
+# 4. Place management interfaces on isolated VLAN
+# 5. Disable unused services (SSH, FTP, etc.)
+# 6. Enable HTTPS for web access
+# 7. Regular firmware updates
+# 8. Enable logging/syslog for audit trail

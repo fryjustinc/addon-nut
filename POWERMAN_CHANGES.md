@@ -40,6 +40,15 @@ This document summarizes the changes made to add PowerMan driver support for PDU
 4. **nut/rootfs/usr/bin/test-powerman**
    - Helper script to test PowerMan connectivity (optional debugging tool)
 
+5. **nut/rootfs/usr/bin/test-apc-ap7900b**
+   - Specific test script for APC AP7900B PDUs
+
+6. **nut/examples/apc-ap7900b-config.yaml**
+   - Complete configuration example for APC AP7900B
+
+7. **nut/examples/README.md**
+   - Documentation for example configurations
+
 ## Configuration Example
 
 ```yaml
@@ -81,9 +90,47 @@ shutdown_host: "false"
 ## Supported PDU Types
 
 - **ipmipower**: IPMI-based PDUs (most server rack PDUs)
+- **apc**: APC MasterSwitch and AP series (including AP7900B)
 - **baytech**: Baytech RPC series
-- **apc**: APC MasterSwitch series
+- **raritan-px**: Raritan PX series
 - Additional types can be added by extending the case statement in nut.sh
+
+## APC AP7900B Specific Configuration
+
+The APC AP7900B is a popular 8-outlet switched rack PDU. Configuration example:
+
+```yaml
+devices:
+  - name: rack_pdu
+    driver: powerman
+    port: "powerman://localhost:10101"
+    powerman_device: "apc_pdu"
+
+powerman:
+  enabled: true
+  devices:
+    - name: apc_pdu
+      type: apc
+      host: 192.168.1.75  # Your AP7900B IP address
+      username: apc        # Default username
+      password: yourpass   # Change from default!
+      nodes: "outlet[1-8]" # 8 outlets on AP7900B
+```
+
+### AP7900B Setup Requirements:
+
+1. **Network Configuration**:
+   - Configure static IP address on the PDU
+   - Enable telnet access (port 23)
+   - Verify web interface is accessible
+
+2. **Security**:
+   - Change default credentials (apc/apc)
+   - Consider network segmentation for management network
+
+3. **Firmware**:
+   - Update to AOS v3.9.2 or later for best compatibility
+   - Available from APC/Schneider Electric website
 
 ## How It Works
 

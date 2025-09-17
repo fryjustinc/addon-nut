@@ -145,8 +145,18 @@ if bashio::config.equals 'mode' 'netserver' ;then
                 baytech)
                     echo "device \"${pduname}\" \"baytech\" \"${pduhost}:23\"" > "/etc/powerman/devices/${pduname}.dev"
                     ;;
-                apc)
-                    echo "device \"${pduname}\" \"apcpdu3\" \"${pduhost}:23\"" > "/etc/powerman/devices/${pduname}.dev"
+                apc|apc7900b|ap7900b)
+                    # APC PDUs including AP7900B series
+                    if bashio::config.has_value "powerman.devices[${pdu}].username"; then
+                        username=$(bashio::config "powerman.devices[${pdu}].username")
+                        password=$(bashio::config "powerman.devices[${pdu}].password")
+                        # Use expect script for APC telnet authentication
+                        echo "device \"${pduname}\" \"apcpdu3\" \"${pduhost}:23|&\"" > "/etc/powerman/devices/${pduname}.dev"
+                        echo "login \"${username}\"" >> "/etc/powerman/devices/${pduname}.dev"
+                        echo "password \"${password}\"" >> "/etc/powerman/devices/${pduname}.dev"
+                    else
+                        echo "device \"${pduname}\" \"apcpdu3\" \"${pduhost}:23\"" > "/etc/powerman/devices/${pduname}.dev"
+                    fi
                     ;;
                 *)
                     bashio::log.warning "Unknown PowerMan device type: ${pdutype}"

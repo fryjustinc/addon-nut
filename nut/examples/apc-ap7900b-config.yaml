@@ -1,0 +1,120 @@
+# Home Assistant NUT Addon - APC AP7900B Configuration Example
+# 
+# This is a complete configuration example for using an APC AP7900B
+# 8-outlet switched rack PDU with the NUT addon
+#
+# The AP7900B specifications:
+# - 8 switched outlets
+# - 15A/120V or 10A/230V capacity
+# - Network management via telnet/SSH/HTTP/HTTPS
+# - SNMP monitoring capability
+#
+# Before using this configuration:
+# 1. Set a static IP on your AP7900B
+# 2. Enable telnet access in the PDU network settings
+# 3. Change the default username/password (apc/apc)
+# 4. Update firmware to AOS v3.9.2 or later if possible
+
+# NUT Users Configuration
+users:
+  - username: nutadmin
+    password: StrongPassword123!  # Change this!
+    instcmds:
+      - all
+    actions:
+      - set
+      - fsd
+
+# Device Configuration
+devices:
+  # If you have a UPS as well, you can monitor both
+  # - name: myups
+  #   driver: usbhid-ups
+  #   port: auto
+  #   config: []
+  
+  # APC AP7900B PDU configuration
+  - name: apc_pdu
+    driver: powerman
+    port: "powerman://localhost:10101"
+    config: []
+    powerman_device: "ap7900b"
+    powervalue: 1  # Set to 0 if you only want to monitor, not control shutdown
+
+# PowerMan Configuration for AP7900B
+powerman:
+  enabled: true
+  devices:
+    - name: ap7900b
+      type: apc  # Use 'apc' type for AP7900B
+      host: 192.168.1.75  # Replace with your AP7900B's IP address
+      username: apc       # Replace with your username
+      password: apc       # Replace with your password (CHANGE THIS!)
+      nodes: "outlet[1-8]"  # AP7900B has 8 outlets
+
+# Addon Mode
+mode: netserver
+
+# Shutdown Settings
+shutdown_host: "false"  # Set to "true" if you want the PDU to shutdown the host
+
+# Optional: Enable USB device listing for debugging
+# list_usb_devices: false
+
+# Optional: Logging level for debugging
+# log_level: info  # Options: trace, debug, info, notice, warning, error, fatal
+
+# Notes for Home Assistant Integration:
+# 
+# After starting the addon with this configuration:
+# 1. Go to Settings > Devices & Services in Home Assistant
+# 2. Add the NUT integration
+# 3. Use these settings:
+#    - Host: a0d7b954-nut (or localhost if on same machine)
+#    - Port: 3493
+#    - Username: nutadmin
+#    - Password: (your password from above)
+# 
+# The integration will create entities for:
+# - ups.status (PDU status)
+# - ups.load (if supported by the PDU)
+# - Individual outlet status (if exposed by the driver)
+#
+# You can then create automations to:
+# - Monitor outlet status
+# - Send notifications on power events
+# - Control outlets (if supported)
+# - Track power consumption (if supported by your PDU model)
+
+# Troubleshooting Commands:
+#
+# To test the configuration, you can run these commands in the addon terminal:
+#
+# 1. Test network connectivity:
+#    ping 192.168.1.75
+#
+# 2. Test telnet access:
+#    telnet 192.168.1.75 23
+#
+# 3. Run the APC test script:
+#    /usr/bin/test-apc-ap7900b
+#
+# 4. Check PowerMan status:
+#    powerman -h localhost:10101 -l
+#
+# 5. Query NUT for PDU status:
+#    upsc apc_pdu@localhost
+#
+# Common Issues and Solutions:
+#
+# Issue: "Connection refused" errors
+# Solution: Enable telnet in PDU settings, check firewall rules
+#
+# Issue: "Login failed" errors
+# Solution: Verify username/password, check if account is locked
+#
+# Issue: PDU not appearing in Home Assistant
+# Solution: Check addon logs, verify PowerMan daemon is running
+#
+# Issue: Cannot control outlets
+# Solution: Verify user has outlet control permissions in PDU settings

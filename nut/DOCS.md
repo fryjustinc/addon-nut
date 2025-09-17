@@ -428,9 +428,190 @@ powerman:
 
 Supported PDU types include:
 - `ipmipower` - IPMI-based PDUs (most common for server PDUs)
+- `apc` - APC MasterSwitch and AP series (AP7900B, AP7901, AP8959, etc.)
 - `baytech` - Baytech RPC series
-- `apc` - APC MasterSwitch series
+- `raritan-px` - Raritan PX series
 - And many others (check PowerMan documentation)
+
+### Example: APC SMT2200RM2UC UPS with NMC2
+
+The APC SMT2200RM2UC is a 2200VA/1980W rack-mount Smart-UPS. When equipped with an NMC2 (Network Management Card 2), it can be monitored over the network using SNMP.
+
+#### Configuration for SMT2200RM2UC with NMC2:
+
+```yaml
+users:
+  - username: nutadmin
+    password: changeme
+    instcmds:
+      - all
+    actions:
+      - set
+      - fsd
+    upsmon: master
+
+devices:
+  - name: smart_ups
+    driver: snmp-ups
+    port: 192.168.1.50  # IP address of the NMC2
+    config:
+      - community = "private"  # SNMP community string
+      - snmp_version = "v1"   # or v2c, v3
+      - pollfreq = 15
+      - desc = "APC Smart-UPS 2200RM"
+
+mode: netserver
+shutdown_host: "false"
+```
+
+#### NMC2 Setup Requirements:
+
+1. **Network Configuration**:
+   - Access NMC2 via serial (9600,8,N,1) or web interface
+   - Set static IP address via Configuration → Network → TCP/IP
+   - Note: Default credentials are often apc/apc
+
+2. **SNMP Configuration**:
+   - Enable SNMP: Configuration → Network → SNMPv1
+   - Change community strings from defaults (public/private)
+   - Consider using SNMPv3 for better security:
+
+```yaml
+# SNMPv3 configuration (more secure)
+config:
+  - snmp_version = "v3"
+  - secLevel = "authPriv"
+  - secName = "nutmon"
+  - authPassword = "authentication_passphrase"
+  - privPassword = "privacy_passphrase"
+  - authProtocol = "SHA"
+  - privProtocol = "AES"
+```
+
+3. **Firmware Updates**:
+   - Recommended: AOS 6.8.2 or later for UPS
+   - NMC2 firmware: 7.1.0 or later
+   - Download from Schneider Electric website (free account required)
+
+#### Available Monitoring Data:
+
+- **Power Status**: Online, On Battery, Low Battery
+- **Battery Info**: Charge level, runtime, voltage, temperature
+- **Input Power**: Voltage, frequency, transfer reason
+- **Output Power**: Voltage, frequency, current, load percentage
+- **Environmental**: Temperature (if probe connected)
+- **Events**: Self-test results, last transfer time
+
+#### Testing SNMP Connection:
+
+```bash
+# Test SNMP connectivity
+snmpwalk -v1 -c private 192.168.1.50 .1.3.6.1.4.1.318
+
+# Query via NUT
+upsc smart_ups@localhost
+```
+
+### Example: APC AP7900B Configuration
+
+The APC AP7900B is an 8-outlet switched rack PDU commonly used in data centers. Here's how to configure it:
+
+```yaml
+users:
+  - username: nutadmin
+    password: changeme
+    instcmds:
+      - all
+    actions: []
+
+devices:
+  - name: apc7900b
+    driver: powerman
+    port: "powerman://localhost:10101"
+    config: []
+    powerman_device: "apc_pdu"
+
+powerman:
+  enabled: true
+  devices:
+    - name: apc_pdu
+      type: apc
+      host: 192.168.1.75  # IP address of your AP7900B
+      username: apc        # Default username is often 'apc'
+      password: apc        # Default password - CHANGE THIS!
+      nodes: "outlet[1-8]" # AP7900B has 8 outlets
+
+mode: netserver
+shutdown_host: "false"
+```
+
+**Important AP7900B Notes:**
+
+1. **Default Credentials**: The factory default username/password is often `apc`/`apc` - change this immediately!
+2. **Network Settings**: Ensure the PDU is configured with a static IP address
+3. **Telnet Access**: The AP7900B uses telnet (port 23) by default. Ensure telnet is enabled in the PDU's network settings
+4. **Outlet Naming**: Outlets are numbered 1-8 on the AP7900B
+5. **Firmware**: Update to the latest firmware for best compatibility
+
+**Home Assistant Sensors**
+
+Once configured, the NUT integration in Home Assistant will provide sensors for:
+- PDU status
+- Individual outlet status (if supported by the driver)
+- Power consumption metrics (if available)
+
+### Complete Example with SMT2200RM2UC UPS and AP7900B PDU
+
+Here's a complete configuration example monitoring both an APC Smart-UPS 2200 (via NMC2) and an APC AP7900B PDU:
+
+```yaml
+users:
+  - username: nutadmin
+    password: changeme
+    instcmds:
+      - all
+    actions:
+      - set
+      - fsd
+    upsmon: master
+
+devices:
+  # APC Smart-UPS 2200 with NMC2 (SNMP)
+  - name: smart_ups
+    driver: snmp-ups
+    port: 192.168.1.50  # NMC2 IP address
+    config:
+      - community = "private"
+      - snmp_version = "v1"
+      - pollfreq = 15
+      - desc = "APC Smart-UPS 2200RM"
+  
+  # APC AP7900B PDU via PowerMan
+  - name: rack_pdu
+    driver: powerman
+    port: "powerman://localhost:10101"
+    config: []
+    powerman_device: "ap7900b"
+
+powerman:
+  enabled: true
+  devices:
+    - name: ap7900b
+      type: apc
+      host: 192.168.1.75
+      username: apc
+      password: apc  # CHANGE THIS!
+      nodes: "outlet[1-8]"
+
+mode: netserver
+shutdown_host: "false"
+```
+
+This configuration provides:
+- **UPS Monitoring**: Battery status, runtime, load, power quality
+- **PDU Control**: Individual outlet switching and monitoring
+- **Redundancy**: Monitor both power sources
+- **Home Assistant Integration**: All metrics available as sensors
 
 ### Complete Example with UPS and PDU
 
@@ -493,3 +674,38 @@ If you're having issues with PowerMan:
 2. Verify IPMI credentials if using `ipmipower` type
 3. Check the add-on logs for specific error messages
 4. Try connecting to the PDU directly using `ipmitool` or similar to verify credentials
+
+#### APC AP7900B Specific Troubleshooting
+
+If you're having issues with an APC AP7900B:
+
+1. **Test telnet connectivity**:
+   ```bash
+   telnet 192.168.1.75 23  # Replace with your PDU's IP
+   ```
+   You should see an APC login prompt.
+
+2. **Verify network configuration on the PDU**:
+   - Access the PDU via web interface (http://192.168.1.75)
+   - Navigate to Network -> TCP/IP
+   - Ensure Telnet is enabled
+   - Check that the IP configuration is correct
+
+3. **Check outlet access control**:
+   - In the web interface, go to Outlet Management
+   - Verify that outlet control is not restricted
+
+4. **Common error messages**:
+   - `Connection refused`: Telnet is disabled or firewall blocking port 23
+   - `Login incorrect`: Wrong username/password - check PDU configuration
+   - `Timeout`: Network connectivity issue or wrong IP address
+
+5. **Reset to factory defaults** (if needed):
+   - Hold the reset button on the PDU for 10-15 seconds
+   - Default credentials will be restored (usually apc/apc)
+   - Network settings will reset to DHCP
+
+6. **Firmware considerations**:
+   - Older firmware may have compatibility issues
+   - Update via web interface: Administration -> Firmware Update
+   - Recommended: AOS v3.9.2 or later for AP7900B
