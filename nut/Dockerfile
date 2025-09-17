@@ -57,8 +57,8 @@ RUN \
        openssl \
        libsnmp40t64 \
        libneon27-gnutls \
-       libfreeipmi \
-       libipmimonitoring \
+       libfreeipmi17 \
+       libipmimonitoring6 \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
