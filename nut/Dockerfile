@@ -8,7 +8,6 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends \
        build-essential \
        git \
-       python2.7 \
        autoconf \
        automake \
        libtool \
