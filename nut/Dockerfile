@@ -1,46 +1,5 @@
 ARG BUILD_FROM=ghcr.io/hassio-addons/debian-base:8.1.1
 # hadolint ignore=DL3006
-FROM ${BUILD_FROM} as builder
-
-# Setup builder
-# hadolint ignore=DL3003
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends \
-       build-essential \
-       git \
-       autoconf \
-       automake \
-       libtool \
-    && apt-get build-dep nut
-       
-RUN git clone https://github.com/networkupstools/nut.git \
-    && cd nut \
-    && ./autogen.sh \
-    && ./configure \
-            --prefix=/usr \
-            --libexecdir=/usr/lib/nut \
-            --without-wrap \
-            --with-user=root \
-            --with-group=root \
-            --disable-static \
-            --with-serial \
-            --with-usb \
-            --without-avahi \
-            --with-snmp \
-            --with-neon \
-            --with-powerman \
-            --without-ipmi \
-            --without-freeipmi \
-            --with-libltdl \
-            --without-cgi \
-            --with-drvpath=/usr/lib/nut \
-            --datadir=/usr/share/nut \
-            --sysconfdir=/etc/nut \
-            --with-statepath=/var/run/nut \
-            --with-altpidpath=/var/run/nut \
-    && make DESTDIR=/app install \
-    && make DESTDIR=/app install-conf
-
 FROM ${BUILD_FROM}
 
 # Setup base
@@ -48,20 +7,16 @@ FROM ${BUILD_FROM}
 RUN \
     apt-get update \
     && apt-get install -y --no-install-recommends \
-       usbutils \
-       libtool \
-       openssl \
-       libsnmp40t64 \
-       libneon27-gnutls \
-       libfreeipmi17 \
-       libipmimonitoring6 \
+        nut=2.8.1-5 \
+        nut-snmp=2.8.1-5 \
+        nut-xml=2.8.1-5 \
+        nut-modbus=2.8.1-5 \
+        usbutils=1:018-2 \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy root filesystem
 COPY rootfs /
-
-COPY --from=builder /app /
 
 # Build arguments
 ARG BUILD_ARCH
