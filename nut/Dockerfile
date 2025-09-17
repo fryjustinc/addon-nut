@@ -1,4 +1,4 @@
-ARG BUILD_FROM=ghcr.io/hassio-addons/debian-base/amd64:4.2.0
+ARG BUILD_FROM=ghcr.io/hassio-addons/debian-base:8.1.1
 # hadolint ignore=DL3006
 FROM ${BUILD_FROM} as builder
 
@@ -8,7 +8,7 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends \
        build-essential \
        git \
-       python3 \
+       python2 \
        autoconf \
        automake \
        libtool \
@@ -55,10 +55,10 @@ RUN \
        usbutils \
        libtool \
        openssl \
-       libsnmp30 \
+       libsnmp40t64 \
        libneon27-gnutls \
-       libfreeipmi17 \
-       libipmimonitoring6 \
+       libfreeipmi \
+       libipmimonitoring \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
