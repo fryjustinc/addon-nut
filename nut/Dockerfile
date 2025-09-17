@@ -11,7 +11,7 @@ RUN apt-get update \
        autoconf \
        automake \
        libtool \
-    && apt-get install build-dep nut
+    && apt-get build-dep nut
        
 RUN git clone https://github.com/networkupstools/nut.git \
     && cd nut \
