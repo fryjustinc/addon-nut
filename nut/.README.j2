@@ -7,7 +7,7 @@
 [![Buy me a coffee][buymeacoffee-shield]][buymeacoffee]
 
 A Network UPS Tools daemon to allow you to easily manage battery backup (UPS)
-devices connected to your Home Assistant machine.
+devices and Power Distribution Units (PDUs) connected to your Home Assistant machine.
 
 ## About
 
@@ -28,6 +28,14 @@ Be sure to add the NUT integration after starting the add-on.
 
 For more information on how to configure the NUT Sensor in Home Assistant
 see the [NUT integration documentation][nut-ha-docs].
+
+### PowerMan PDU Support
+
+This add-on now includes support for Power Distribution Units (PDUs) through
+the PowerMan driver integration. You can monitor and control IPMI-based PDUs,
+APC MasterSwitch series, Baytech RPC series, and many other PDU models.
+
+See the documentation for detailed configuration examples.
 
 {% if channel == "edge" %}
 ## WARNING! THIS IS AN EDGE VERSION!

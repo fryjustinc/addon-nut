@@ -35,6 +35,16 @@ options:
       config: []
   mode: netserver
   shutdown_host: "false"
+  # Example PowerMan PDU configuration (uncomment to use):
+  # powerman:
+  #   enabled: true
+  #   devices:
+  #     - name: pdu1
+  #       type: ipmipower
+  #       host: 192.168.1.100
+  #       username: admin
+  #       password: changeme
+  #       nodes: "outlet[1-8]"
 schema:
   log_level: list(trace|debug|info|notice|warning|error|fatal)?
   users:
@@ -52,6 +62,20 @@ schema:
       powervalue: int?
       config:
         - str
+      # PowerMan specific options
+      powerman_host: str?
+      powerman_port: int?
+      powerman_device: str?
+  # PowerMan configuration section
+  powerman:
+    enabled: bool?
+    devices:
+      - name: str
+        type: str  # e.g., ipmipower, baytech, apc, etc.
+        host: str
+        username: str?
+        password: password?
+        nodes: str?  # Node mapping
   mode: list(netserver|netclient)
   shutdown_host: bool
   list_usb_devices: bool?

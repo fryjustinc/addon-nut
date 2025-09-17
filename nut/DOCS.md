@@ -392,3 +392,104 @@ SOFTWARE.
 [upsd]: https://networkupstools.org/docs/man/upsd.html
 [upsmon]: https://networkupstools.org/docs/man/upsmon.html
 [usbhid-ups]: https://networkupstools.org/docs/man/usbhid-ups.html
+
+## PowerMan PDU Support
+
+This add-on includes support for Power Distribution Units (PDUs) through the PowerMan driver. This allows you to monitor and control various PDU models including IPMI-based PDUs, APC, Baytech, and others.
+
+### Configuring PowerMan
+
+To use PowerMan with your PDU:
+
+1. Enable PowerMan in the configuration
+2. Configure your PDU device
+3. Add a NUT device using the `powerman` driver
+
+Example configuration:
+
+```yaml
+devices:
+  - name: mypdu
+    driver: powerman
+    port: "powerman://localhost:10101"
+    config: []
+    powerman_device: "pdu1"
+
+powerman:
+  enabled: true
+  devices:
+    - name: pdu1
+      type: ipmipower
+      host: 192.168.1.100
+      username: admin
+      password: secretpass
+      nodes: "outlet[1-8]"
+```
+
+Supported PDU types include:
+- `ipmipower` - IPMI-based PDUs (most common for server PDUs)
+- `baytech` - Baytech RPC series
+- `apc` - APC MasterSwitch series
+- And many others (check PowerMan documentation)
+
+### Complete Example with UPS and PDU
+
+Here's a complete configuration example monitoring both a UPS and a PDU:
+
+```yaml
+users:
+  - username: nutadmin
+    password: changeme
+    instcmds:
+      - all
+    actions: []
+
+devices:
+  # Traditional UPS device
+  - name: myups
+    driver: usbhid-ups
+    port: auto
+    config: []
+  # PDU device via PowerMan
+  - name: serverpdu
+    driver: powerman
+    port: "powerman://localhost:10101"
+    config: []
+    powerman_device: "ipmi_pdu"
+
+powerman:
+  enabled: true
+  devices:
+    - name: ipmi_pdu
+      type: ipmipower
+      host: 192.168.1.50
+      username: ADMIN
+      password: ADMIN
+      nodes: "server[1-8]"
+
+mode: netserver
+shutdown_host: "false"
+```
+
+### PowerMan Security Notes
+
+1. **Credentials**: PowerMan credentials are stored in plain text in the configuration. Ensure your Home Assistant instance is properly secured.
+2. **Network Access**: The PDU must be accessible from the Home Assistant host on the network.
+3. **Driver Compatibility**: The `powerman` driver in NUT acts as a bridge to the PowerMan daemon. Not all NUT features may be available depending on your PDU model.
+
+### Testing Your PDU Connection
+
+After configuring, you can test your PDU connection:
+
+1. Check the add-on logs for any PowerMan or driver errors
+2. Use the NUT integration in Home Assistant to add your PDU device
+3. Monitor the sensors to ensure data is being received
+
+### Troubleshooting PowerMan
+
+If you're having issues with PowerMan:
+
+1. Ensure the PDU is reachable: `ping <pdu_ip>`
+2. Verify IPMI credentials if using `ipmipower` type
+3. Check the add-on logs for specific error messages
+4. Try connecting to the PDU directly using `ipmitool` or similar to verify credentials

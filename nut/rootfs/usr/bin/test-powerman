@@ -1,0 +1,50 @@
+#!/command/with-contenv bashio
+# ==============================================================================
+# Home Assistant Community Add-on: Network UPS Tools
+# PowerMan connectivity test script
+# ==============================================================================
+
+bashio::log.info "Testing PowerMan connectivity..."
+
+# Check if PowerMan is enabled
+if ! bashio::config.has_value 'powerman.enabled' || ! bashio::config.true 'powerman.enabled'; then
+    bashio::log.error "PowerMan is not enabled in the configuration"
+    exit 1
+fi
+
+# Check if powermand is running
+if pgrep -x "powermand" > /dev/null; then
+    bashio::log.info "PowerMan daemon is running"
+else
+    bashio::log.error "PowerMan daemon is not running"
+    exit 1
+fi
+
+# Test PowerMan connection
+if command -v powerman >/dev/null 2>&1; then
+    bashio::log.info "Testing PowerMan client connection..."
+    timeout 5 powerman -h localhost:10101 -q && {
+        bashio::log.info "PowerMan connection successful"
+        bashio::log.info "Available PDU devices:"
+        powerman -h localhost:10101 -l
+    } || {
+        bashio::log.error "Failed to connect to PowerMan daemon"
+    }
+else
+    bashio::log.warning "PowerMan client not found"
+fi
+
+# Check NUT powerman driver
+bashio::log.info "Checking for PowerMan devices in NUT configuration..."
+for device in $(bashio::config "devices|keys"); do
+    if bashio::config.equals "devices[${device}].driver" "powerman"; then
+        upsname=$(bashio::config "devices[${device}].name")
+        bashio::log.info "Found PowerMan device: ${upsname}"
+        
+        # Try to get status from the device
+        if command -v upsc >/dev/null 2>&1; then
+            bashio::log.info "Querying device status..."
+            upsc "${upsname}@localhost" 2>&1 | head -20 || true
+        fi
+    fi
+done
