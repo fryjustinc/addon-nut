@@ -57,6 +57,7 @@ listen "0.0.0.0:10101"
 
 # Include device specifications
 include "/etc/powerman/devices/apcpdu3.dev"
+include "/etc/powerman/devices/apcpdu.dev"
 
 EOF
 

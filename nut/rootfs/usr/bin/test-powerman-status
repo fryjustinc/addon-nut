@@ -1,0 +1,72 @@
+#!/bin/bash
+# Test PowerMan status and connectivity
+
+echo "=== PowerMan Status Check ==="
+echo ""
+
+echo "1. PowerMan Process:"
+if pgrep powermand >/dev/null; then
+    echo "✓ PowerMan is running (PID: $(pgrep powermand))"
+else
+    echo "✗ PowerMan is NOT running"
+fi
+
+echo ""
+echo "2. PowerMan Port Status:"
+if nc -z localhost 10101 2>/dev/null; then
+    echo "✓ Port 10101 is open"
+else
+    echo "✗ Port 10101 is NOT open"
+fi
+
+echo ""
+echo "3. PowerMan Client Test (pm command):"
+if command -v pm &>/dev/null; then
+    echo "Testing: pm -h localhost -l"
+    timeout 2 pm -h localhost -l 2>&1
+    echo ""
+    echo "Testing: pm -h localhost -q"
+    timeout 2 pm -h localhost -q 2>&1
+    echo ""
+    echo "Testing: pm -h localhost -Q"
+    timeout 2 pm -h localhost -Q 2>&1
+else
+    echo "✗ pm command not found"
+fi
+
+echo ""
+echo "4. Direct PowerMan Connection Test:"
+echo "Sending 'help' command..."
+echo "help" | nc -w 2 localhost 10101 2>&1
+
+echo ""
+echo "5. PowerMan Log (last 30 lines):"
+if [ -f /var/log/powerman.log ]; then
+    tail -30 /var/log/powerman.log
+else
+    echo "No log file found"
+fi
+
+echo ""
+echo "6. Check NUT powerman-pdu driver status:"
+if [ -S /run/nut/powerman-pdu-rack_pdu ]; then
+    echo "✓ Driver socket exists: /run/nut/powerman-pdu-rack_pdu"
+    ls -la /run/nut/powerman-pdu-rack_pdu
+else
+    echo "✗ Driver socket not found"
+fi
+
+echo ""
+echo "7. Test upsc command:"
+upsc rack_pdu 2>&1 | head -20
+
+echo ""
+echo "8. PowerMan Configuration:"
+if [ -f /etc/powerman/powerman.conf ]; then
+    grep -E "^(device|node)" /etc/powerman/powerman.conf
+else
+    echo "Configuration not found"
+fi
+
+echo ""
+echo "=== End Status Check ==="

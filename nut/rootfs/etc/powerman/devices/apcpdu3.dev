@@ -7,8 +7,9 @@ specification "apcpdu3" {
     plug name { "1" "2" "3" "4" "5" "6" "7" "8" }
     
     script login {
+        expect "User Name :*"
         send "apc\r\n"
-        expect "Password  :"
+        expect "Password  :*"
         send "apc\r\n"
         expect "> "
     }
@@ -21,7 +22,7 @@ specification "apcpdu3" {
         send "olStatus all\r\n"
         expect "E000: Success\r\n"
         foreachplug {
-            expect "([0-9]+): (On|Off): "
+            expect "([0-9]+): (On|Off).*\r\n"
             setplugstate $1 $2 on="On" off="Off"
         }
         expect "> "
