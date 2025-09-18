@@ -1,0 +1,110 @@
+#!/bin/bash
+# Debug PDU integration
+
+echo "=================================="
+echo "PDU Integration Debug"
+echo "=================================="
+echo ""
+
+# 1. Check PowerMan
+echo "1. PowerMan Status:"
+if pgrep powermand > /dev/null; then
+    echo "✓ PowerMan daemon is running (PID: $(pgrep powermand))"
+else
+    echo "✗ PowerMan daemon is NOT running"
+fi
+
+if nc -z 127.0.0.1 10101 2>/dev/null; then
+    echo "✓ PowerMan listening on port 10101"
+else
+    echo "✗ PowerMan NOT listening on port 10101"
+fi
+
+echo ""
+echo "PowerMan outlet status:"
+echo "query rack_pdu" | nc -w 2 127.0.0.1 10101 2>/dev/null || echo "Failed to query PowerMan"
+
+# 2. Check sync service
+echo ""
+echo "2. Sync Service Status:"
+if pgrep -f "powerman-sync" > /dev/null; then
+    echo "✓ PowerMan sync service is running"
+else
+    echo "✗ PowerMan sync service is NOT running"
+fi
+
+# 3. Check dummy device file
+echo ""
+echo "3. Dummy Device File:"
+if [ -f /etc/nut/rack_pdu.dev ]; then
+    echo "✓ Device file exists"
+    echo "File modified: $(stat -c '%y' /etc/nut/rack_pdu.dev)"
+    echo ""
+    echo "First 30 lines of device file:"
+    head -30 /etc/nut/rack_pdu.dev
+    echo ""
+    echo "Outlet current/power entries:"
+    grep -E "outlet\.[0-9]\.(current|power)" /etc/nut/rack_pdu.dev | head -10
+else
+    echo "✗ Device file NOT found"
+fi
+
+# 4. Check dummy-ups driver
+echo ""
+echo "4. Dummy-UPS Driver:"
+if pgrep -f "dummy-ups.*rack_pdu" > /dev/null; then
+    echo "✓ dummy-ups driver is running for rack_pdu"
+    PID=$(pgrep -f "dummy-ups.*rack_pdu")
+    echo "  PID: ${PID}"
+else
+    echo "✗ dummy-ups driver NOT running for rack_pdu"
+fi
+
+# 5. Check UPS status
+echo ""
+echo "5. NUT Status:"
+echo "Testing: upsc rack_pdu@localhost"
+upsc rack_pdu@localhost 2>&1 | head -20 || echo "Failed to query UPS"
+
+echo ""
+echo "Outlet status from NUT:"
+upsc rack_pdu@localhost 2>/dev/null | grep -E "outlet\.[0-9]\.status" || echo "No outlet status found"
+
+echo ""
+echo "Current/Power from NUT:"
+upsc rack_pdu@localhost 2>/dev/null | grep -E "(current|power)" | head -10 || echo "No current/power data found"
+
+# 6. Test SNMP
+echo ""
+echo "6. SNMP Test:"
+PDU_HOST="192.168.51.124"
+echo "Testing SNMP to ${PDU_HOST}..."
+if timeout 2 snmpget -v1 -c public ${PDU_HOST} sysDescr.0 2>&1 | grep -q "APC"; then
+    echo "✓ SNMP working"
+    
+    # Try to get one outlet's current
+    echo "Testing outlet 1 current:"
+    CURRENT=$(snmpget -v1 -c public -Ovq ${PDU_HOST} .1.3.6.1.4.1.318.1.1.12.2.3.1.1.2.1.1 2>/dev/null | grep -oE '[0-9]+' || echo "N/A")
+    echo "Outlet 1 current raw value: ${CURRENT}"
+else
+    echo "✗ SNMP not working"
+    echo "Testing connectivity:"
+    ping -c 1 ${PDU_HOST} 2>&1 | grep -E "(bytes from|Destination|unreachable)"
+fi
+
+# 7. Check logs
+echo ""
+echo "7. Recent Logs:"
+echo "Last 10 lines of PowerMan sync service:"
+tail -10 /var/log/s6-rc/powerman-sync/current 2>/dev/null || echo "No sync service logs found"
+
+echo ""
+echo "=================================="
+echo "Debug Complete"
+echo "=================================="
+echo ""
+echo "Next steps if sensors show 0:"
+echo "1. Run: test-pdu-snmp"
+echo "2. Check PDU web interface for SNMP settings"
+echo "3. Verify SNMP community string is 'public'"
+echo "4. Check if PDU supports current/power monitoring"

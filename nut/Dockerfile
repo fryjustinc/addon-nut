@@ -57,6 +57,8 @@ RUN chmod +x /usr/bin/notify \
     && chmod +x /usr/bin/pdu-control 2>/dev/null || true \
     && chmod +x /usr/bin/pdu-command-handler 2>/dev/null || true \
     && chmod +x /usr/bin/test-pdu-control 2>/dev/null || true \
+    && chmod +x /usr/bin/test-pdu-snmp 2>/dev/null || true \
+    && chmod +x /usr/bin/debug-pdu-integration 2>/dev/null || true \
     && chmod +x /usr/bin/shutdownhost \
     && chmod +x /usr/bin/test-powerman 2>/dev/null || true \
     && chmod +x /usr/bin/test-powerman-status 2>/dev/null || true \

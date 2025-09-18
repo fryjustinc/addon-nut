@@ -1,0 +1,122 @@
+#!/bin/bash
+# Test SNMP connectivity to APC PDU
+
+echo "=================================="
+echo "PDU SNMP Test Script"
+echo "=================================="
+echo ""
+
+PDU_HOST="${1:-192.168.51.124}"
+echo "Testing PDU at: ${PDU_HOST}"
+echo ""
+
+# Test basic SNMP connectivity
+echo "1. Testing SNMP connectivity..."
+if timeout 2 snmpget -v1 -c public ${PDU_HOST} sysDescr.0 2>/dev/null | grep -q "APC"; then
+    echo "✓ SNMP connection successful"
+    snmpget -v1 -c public ${PDU_HOST} sysDescr.0 2>&1 | head -2
+else
+    echo "✗ SNMP connection failed"
+    echo "Trying with -v2c..."
+    if timeout 2 snmpget -v2c -c public ${PDU_HOST} sysDescr.0 2>/dev/null | grep -q "APC"; then
+        echo "✓ SNMPv2c works"
+    else
+        echo "✗ SNMPv2c also failed"
+        echo ""
+        echo "Debug info:"
+        echo "- Check if SNMP is enabled on PDU"
+        echo "- Check community string (default: public)"
+        echo "- Check network connectivity: ping ${PDU_HOST}"
+        ping -c 1 ${PDU_HOST} 2>&1 | grep -E "(bytes from|Destination)"
+        exit 1
+    fi
+fi
+
+echo ""
+echo "2. Testing PDU-specific OIDs..."
+echo ""
+
+# Test outlet status OIDs for AP7900B
+echo "Outlet Status (1=on, 2=off):"
+for i in {1..8}; do
+    STATUS=$(snmpget -v1 -c public -Ov ${PDU_HOST} .1.3.6.1.4.1.318.1.1.12.3.3.1.1.4.1.${i} 2>/dev/null | grep -oE '[0-9]+' || echo "N/A")
+    echo "  Outlet ${i}: ${STATUS}"
+done
+
+echo ""
+echo "3. Testing current monitoring OIDs..."
+echo ""
+
+# AP7900B current OIDs (in deciamps)
+echo "Outlet Current (deciamps):"
+for i in {1..8}; do
+    # Try multiple possible OIDs for current
+    CURRENT=""
+    
+    # Standard AP7900B OID
+    CURRENT=$(snmpget -v1 -c public -Ov ${PDU_HOST} .1.3.6.1.4.1.318.1.1.12.2.3.1.1.2.1.${i} 2>/dev/null | grep -oE '[0-9]+')
+    
+    # Alternative OID if first doesn't work
+    if [ -z "$CURRENT" ]; then
+        CURRENT=$(snmpget -v1 -c public -Ov ${PDU_HOST} .1.3.6.1.4.1.318.1.1.26.8.3.1.5.1.${i} 2>/dev/null | grep -oE '[0-9]+')
+    fi
+    
+    if [ -n "$CURRENT" ] && [ "$CURRENT" != "0" ]; then
+        AMPS=$(echo "scale=2; ${CURRENT} / 10" | bc 2>/dev/null)
+        echo "  Outlet ${i}: ${CURRENT} deciamps (${AMPS} A)"
+    else
+        echo "  Outlet ${i}: No data"
+    fi
+done
+
+echo ""
+echo "4. Testing power monitoring OIDs..."
+echo ""
+
+# AP7900B power OIDs (in watts)
+echo "Outlet Power (watts):"
+for i in {1..8}; do
+    POWER=$(snmpget -v1 -c public -Ov ${PDU_HOST} .1.3.6.1.4.1.318.1.1.12.2.3.1.1.7.1.${i} 2>/dev/null | grep -oE '[0-9]+' || echo "")
+    
+    # Try alternative OID
+    if [ -z "$POWER" ]; then
+        POWER=$(snmpget -v1 -c public -Ov ${PDU_HOST} .1.3.6.1.4.1.318.1.1.26.8.3.1.6.1.${i} 2>/dev/null | grep -oE '[0-9]+' || echo "")
+    fi
+    
+    if [ -n "$POWER" ]; then
+        echo "  Outlet ${i}: ${POWER} W"
+    else
+        echo "  Outlet ${i}: No data"
+    fi
+done
+
+echo ""
+echo "5. Total PDU load..."
+echo ""
+
+# Try to get total load
+TOTAL_LOAD=$(snmpget -v1 -c public -Ov ${PDU_HOST} .1.3.6.1.4.1.318.1.1.12.2.3.1.1.2.1 2>/dev/null | grep -oE '[0-9]+' || echo "")
+if [ -n "$TOTAL_LOAD" ]; then
+    TOTAL_AMPS=$(echo "scale=2; ${TOTAL_LOAD} / 10" | bc 2>/dev/null)
+    echo "Total Load: ${TOTAL_LOAD} deciamps (${TOTAL_AMPS} A)"
+fi
+
+echo ""
+echo "6. Checking for alternative OID trees..."
+echo ""
+
+# Do an SNMP walk to find valid OIDs
+echo "Performing SNMP walk to find valid OIDs (this may take a moment)..."
+echo "Current/Power related OIDs found:"
+snmpwalk -v1 -c public ${PDU_HOST} .1.3.6.1.4.1.318.1.1.12 2>/dev/null | grep -E "(urrent|ower|oad|Outlet)" | head -20
+
+echo ""
+echo "=================================="
+echo "Test complete!"
+echo ""
+echo "If no current/power data:"
+echo "1. PDU might not support power monitoring"
+echo "2. Different firmware version with different OIDs"
+echo "3. Power monitoring might be disabled"
+echo "4. Try the PDU web interface to verify features"
+echo "=================================="

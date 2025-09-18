@@ -1,17 +1,17 @@
 #!/command/with-contenv bashio
 # ==============================================================================
 # Home Assistant Community Add-on: Network UPS Tools
-# Enhanced PowerMan to NUT PDU Sync Service with Control and Monitoring
+# Simplified PowerMan to NUT PDU Sync Service
 # ==============================================================================
 
-# Only run if PowerMan is enabled and we have PDU devices
+# Only run if PowerMan is enabled
 if ! bashio::config.true 'powerman_enabled'; then
     bashio::log.info "PowerMan sync service not needed (PowerMan disabled)"
     exec sleep 864000
 fi
 
 # Wait for PowerMan to be ready
-bashio::log.info "Starting Enhanced PowerMan-NUT sync service..."
+bashio::log.info "Starting Simplified PowerMan-NUT sync service..."
 sleep 10
 
 # Check if PowerMan is running
@@ -20,35 +20,33 @@ if ! nc -z 127.0.0.1 10101 2>/dev/null; then
     exec sleep 864000
 fi
 
-# Get PDU host for SNMP queries
-PDU_HOST=$(bashio::config 'powerman_pdu_host' || echo "192.168.51.124")
-bashio::log.info "PowerMan-NUT sync service started (PDU: ${PDU_HOST})"
+bashio::log.info "PowerMan-NUT sync service started"
 
-# APC PDU SNMP OIDs for AP7900B
-# Current: .1.3.6.1.4.1.318.1.1.12.2.3.1.1.2.1.X (X = outlet number)
-# Power: .1.3.6.1.4.1.318.1.1.12.2.3.1.1.7.1.X
-# Outlet names: .1.3.6.1.4.1.318.1.1.12.3.4.1.1.2.1.X
-# Outlet status: .1.3.6.1.4.1.318.1.1.12.3.3.1.1.4.1.X
+# Get PDU configuration
+PDU_HOST=$(bashio::config 'powerman_pdu_host' || echo "192.168.51.124")
+PDU_NAME=$(bashio::config 'powerman_pdu_name' || echo "rack_pdu")
+
+bashio::log.info "Monitoring PDU: ${PDU_NAME} at ${PDU_HOST}"
 
 # Main sync loop
 while true; do
     # Check if we have any rack_pdu device file
-    if [ -f /etc/nut/rack_pdu.dev ] || [ -f /etc/nut/dummy-ups-rack_pdu ]; then
+    if [ -f /etc/nut/rack_pdu.dev ]; then
         # Query PowerMan for PDU status
         PDU_STATUS=""
-        if command -v pm &>/dev/null; then
-            # Use pm client if available
-            PDU_STATUS=$(pm -h 127.0.0.1 -q rack_pdu 2>/dev/null || true)
-        else
-            # Use netcat as fallback
-            PDU_STATUS=$(echo "query rack_pdu" | nc -w 1 127.0.0.1 10101 2>/dev/null || true)
+        
+        # Try using netcat to get status
+        PDU_STATUS=$(echo "query ${PDU_NAME}" | nc -w 2 127.0.0.1 10101 2>/dev/null || true)
+        
+        if [ -z "${PDU_STATUS}" ]; then
+            bashio::log.warning "Failed to query PowerMan, retrying..."
+            sleep 5
+            continue
         fi
         
-        # Query SNMP for current and power data
-        TOTAL_CURRENT=0
-        TOTAL_POWER=0
+        bashio::log.debug "PowerMan status: ${PDU_STATUS}"
         
-        # Create new status file
+        # Create new status file with basic info
         cat > /tmp/rack_pdu.dev.new << 'EOF'
 # APC AP7900B PDU via PowerMan
 # Auto-generated - do not edit manually
@@ -60,25 +58,11 @@ driver.name: dummy-ups
 driver.parameter.mode: dummy
 driver.parameter.port: rack_pdu.dev
 driver.version: 2.8.1
-driver.version.internal: PowerMan-Bridge
-
-# PDU Commands
-ups.delay.shutdown: 30
-ups.delay.start: 30
-
-# Instant commands for outlet control
-# These will be handled by the pdu-control script
-ups.commands: outlet.1.load.on outlet.1.load.off outlet.1.load.cycle
-ups.commands: outlet.2.load.on outlet.2.load.off outlet.2.load.cycle
-ups.commands: outlet.3.load.on outlet.3.load.off outlet.3.load.cycle
-ups.commands: outlet.4.load.on outlet.4.load.off outlet.4.load.cycle
-ups.commands: outlet.5.load.on outlet.5.load.off outlet.5.load.cycle
-ups.commands: outlet.6.load.on outlet.6.load.off outlet.6.load.cycle
-ups.commands: outlet.7.load.on outlet.7.load.off outlet.7.load.cycle
-ups.commands: outlet.8.load.on outlet.8.load.off outlet.8.load.cycle
-ups.commands: load.on load.off
 
 # Overall PDU status
+ups.status: OL
+ups.mfr: APC
+ups.model: AP7900B PDU (PowerMan)
 outlet.count: 8
 outlet.desc: All outlets
 outlet.id: 0
@@ -86,40 +70,20 @@ outlet.switchable: 1
 
 EOF
         
-        # Parse outlet status and get power data
+        # Parse outlet status from PowerMan
+        # PowerMan typically returns format like: rack_pdu: 1=on 2=on 3=off ...
         for i in {1..8}; do
-            # Default to on if we can't get status
-            STATUS="on"
-            CURRENT="0"
-            POWER="0"
-            VOLTAGE="120"
+            STATUS="on"  # Default to on
             
-            # Try to extract actual status from PowerMan output
-            if echo "${PDU_STATUS}" | grep -q "${i}="; then
-                if echo "${PDU_STATUS}" | grep -q "${i}=on"; then
-                    STATUS="on"
-                elif echo "${PDU_STATUS}" | grep -q "${i}=off"; then
-                    STATUS="off"
-                fi
-            fi
-            
-            # Try to get current and power via SNMP (in deciamps and watts)
-            if command -v snmpget &>/dev/null; then
-                # Get current (returns in deciamps, convert to amps)
-                CURRENT_RAW=$(snmpget -v1 -c public -Ov ${PDU_HOST} .1.3.6.1.4.1.318.1.1.12.2.3.1.1.2.1.${i} 2>/dev/null | grep -oE '[0-9]+' || echo "0")
-                if [ -n "${CURRENT_RAW}" ] && [ "${CURRENT_RAW}" != "0" ]; then
-                    CURRENT=$(echo "scale=2; ${CURRENT_RAW} / 10" | bc 2>/dev/null || echo "0")
-                fi
-                
-                # Get power (already in watts)
-                POWER_RAW=$(snmpget -v1 -c public -Ov ${PDU_HOST} .1.3.6.1.4.1.318.1.1.12.2.3.1.1.7.1.${i} 2>/dev/null | grep -oE '[0-9]+' || echo "0")
-                if [ -n "${POWER_RAW}" ]; then
-                    POWER="${POWER_RAW}"
-                fi
-                
-                # Accumulate totals
-                TOTAL_CURRENT=$(echo "scale=2; ${TOTAL_CURRENT} + ${CURRENT}" | bc 2>/dev/null || echo "0")
-                TOTAL_POWER=$(echo "${TOTAL_POWER} + ${POWER}" | bc 2>/dev/null || echo "0")
+            # Check PowerMan output for this outlet
+            if echo "${PDU_STATUS}" | grep -q "${i}=on"; then
+                STATUS="on"
+            elif echo "${PDU_STATUS}" | grep -q "${i}=off"; then
+                STATUS="off"
+            elif echo "${PDU_STATUS}" | grep -q "outlet${i}=on"; then
+                STATUS="on"
+            elif echo "${PDU_STATUS}" | grep -q "outlet${i}=off"; then
+                STATUS="off"
             fi
             
             # Write outlet information
@@ -129,69 +93,78 @@ outlet.${i}.desc: Outlet ${i}
 outlet.${i}.id: ${i}
 outlet.${i}.status: ${STATUS}
 outlet.${i}.switchable: 1
-outlet.${i}.current: ${CURRENT}
-outlet.${i}.power: ${POWER}
-outlet.${i}.voltage: ${VOLTAGE}
-outlet.${i}.powerfactor: 0.95
-outlet.${i}.realpower: $(echo "scale=0; ${POWER} * 0.95 / 1" | bc 2>/dev/null || echo "0")
 
 EOF
         done
         
-        # Add total power/current information
-        cat >> /tmp/rack_pdu.dev.new << EOF
+        # Try SNMP for current/power if available
+        SNMP_WORKS=false
+        if command -v snmpget &>/dev/null; then
+            # Test SNMP connectivity
+            if timeout 2 snmpget -v1 -c public ${PDU_HOST} sysDescr.0 2>/dev/null | grep -q "APC"; then
+                SNMP_WORKS=true
+                bashio::log.debug "SNMP connection successful"
+            else
+                bashio::log.debug "SNMP not available for ${PDU_HOST}"
+            fi
+        fi
+        
+        if [ "${SNMP_WORKS}" = true ]; then
+            TOTAL_CURRENT=0
+            TOTAL_POWER=0
+            
+            # Add current/power data for each outlet
+            for i in {1..8}; do
+                # Get current (in deciamps, convert to amps)
+                CURRENT_RAW=$(snmpget -v1 -c public -Ovq ${PDU_HOST} .1.3.6.1.4.1.318.1.1.12.2.3.1.1.2.1.${i} 2>/dev/null | grep -oE '[0-9]+' || echo "0")
+                
+                if [ "${CURRENT_RAW}" != "0" ] && [ -n "${CURRENT_RAW}" ]; then
+                    CURRENT=$(echo "scale=2; ${CURRENT_RAW} / 10" | bc 2>/dev/null || echo "0")
+                    TOTAL_CURRENT=$(echo "scale=2; ${TOTAL_CURRENT} + ${CURRENT}" | bc 2>/dev/null || echo "0")
+                    
+                    # Estimate power (current * 120V)
+                    POWER=$(echo "scale=0; ${CURRENT} * 120" | bc 2>/dev/null || echo "0")
+                    TOTAL_POWER=$(echo "${TOTAL_POWER} + ${POWER}" | bc 2>/dev/null || echo "0")
+                    
+                    # Append to outlet section
+                    cat >> /tmp/rack_pdu.dev.new << EOF
+outlet.${i}.current: ${CURRENT}
+outlet.${i}.power: ${POWER}
+outlet.${i}.voltage: 120
+
+EOF
+                fi
+            done
+            
+            # Add total metrics if we got any data
+            if [ "${TOTAL_CURRENT}" != "0" ]; then
+                cat >> /tmp/rack_pdu.dev.new << EOF
 # Total PDU metrics
 outlet.current: ${TOTAL_CURRENT}
 outlet.power: ${TOTAL_POWER}
 outlet.voltage: 120
-outlet.realpower: $(echo "scale=0; ${TOTAL_POWER} * 0.95 / 1" | bc 2>/dev/null || echo "0")
-
-# PDU Status
-ups.status: OL
-ups.mfr: APC
-ups.model: AP7900B (PowerMan)
 ups.load: $(echo "scale=1; ${TOTAL_POWER} / 1440 * 100" | bc 2>/dev/null || echo "0")
-ups.firmware: PowerMan Bridge
 
-# Command mapping for instant commands
-# Format: outlet.X.load.on -> /usr/bin/pdu-control on X
-INSTCMD:outlet.1.load.on:/usr/bin/pdu-control on 1
-INSTCMD:outlet.1.load.off:/usr/bin/pdu-control off 1
-INSTCMD:outlet.1.load.cycle:/usr/bin/pdu-control cycle 1
-INSTCMD:outlet.2.load.on:/usr/bin/pdu-control on 2
-INSTCMD:outlet.2.load.off:/usr/bin/pdu-control off 2
-INSTCMD:outlet.2.load.cycle:/usr/bin/pdu-control cycle 2
-INSTCMD:outlet.3.load.on:/usr/bin/pdu-control on 3
-INSTCMD:outlet.3.load.off:/usr/bin/pdu-control off 3
-INSTCMD:outlet.3.load.cycle:/usr/bin/pdu-control cycle 3
-INSTCMD:outlet.4.load.on:/usr/bin/pdu-control on 4
-INSTCMD:outlet.4.load.off:/usr/bin/pdu-control off 4
-INSTCMD:outlet.4.load.cycle:/usr/bin/pdu-control cycle 4
-INSTCMD:outlet.5.load.on:/usr/bin/pdu-control on 5
-INSTCMD:outlet.5.load.off:/usr/bin/pdu-control off 5
-INSTCMD:outlet.5.load.cycle:/usr/bin/pdu-control cycle 5
-INSTCMD:outlet.6.load.on:/usr/bin/pdu-control on 6
-INSTCMD:outlet.6.load.off:/usr/bin/pdu-control off 6
-INSTCMD:outlet.6.load.cycle:/usr/bin/pdu-control cycle 6
-INSTCMD:outlet.7.load.on:/usr/bin/pdu-control on 7
-INSTCMD:outlet.7.load.off:/usr/bin/pdu-control off 7
-INSTCMD:outlet.7.load.cycle:/usr/bin/pdu-control cycle 7
-INSTCMD:outlet.8.load.on:/usr/bin/pdu-control on 8
-INSTCMD:outlet.8.load.off:/usr/bin/pdu-control off 8
-INSTCMD:outlet.8.load.cycle:/usr/bin/pdu-control cycle 8
-INSTCMD:load.on:/usr/bin/pdu-control load.on all
-INSTCMD:load.off:/usr/bin/pdu-control load.off all
 EOF
+            fi
+        else
+            bashio::log.info "SNMP not available - outlet status only"
+        fi
         
         # Atomically update the file
         mv /tmp/rack_pdu.dev.new /etc/nut/rack_pdu.dev 2>/dev/null || true
         
         # Signal dummy-ups driver to reload (if running)
         if pgrep -f "dummy-ups.*rack_pdu" > /dev/null; then
+            # Send HUP signal to reload configuration
             pkill -HUP -f "dummy-ups.*rack_pdu" 2>/dev/null || true
         fi
+        
+        bashio::log.debug "PDU status updated"
+    else
+        bashio::log.warning "No rack_pdu.dev file found, waiting..."
     fi
     
-    # Sleep for 10 seconds before next update
-    sleep 10
+    # Sleep for 15 seconds before next update
+    sleep 15
 done

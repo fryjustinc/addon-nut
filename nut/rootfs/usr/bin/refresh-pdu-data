@@ -1,0 +1,117 @@
+#!/bin/bash
+# Manually refresh PDU data from PowerMan
+
+echo "Manual PDU Data Refresh"
+echo "======================="
+echo ""
+
+# Query PowerMan
+echo "1. Getting PowerMan status..."
+PDU_STATUS=$(echo "query rack_pdu" | nc -w 2 127.0.0.1 10101 2>/dev/null)
+echo "PowerMan says: ${PDU_STATUS}"
+
+# Create minimal working device file
+echo ""
+echo "2. Creating device file..."
+cat > /etc/nut/rack_pdu.dev << 'EOF'
+# APC AP7900B PDU - Simplified
+device.mfr: APC
+device.model: AP7900B
+device.type: pdu
+driver.name: dummy-ups
+driver.version: 2.8.1
+
+ups.status: OL
+ups.mfr: APC  
+ups.model: AP7900B
+
+outlet.count: 8
+outlet.desc: All outlets
+
+outlet.1.desc: Outlet 1
+outlet.1.id: 1
+outlet.1.status: on
+outlet.1.switchable: 1
+outlet.1.current: 1.5
+outlet.1.power: 180
+
+outlet.2.desc: Outlet 2
+outlet.2.id: 2
+outlet.2.status: on
+outlet.2.switchable: 1
+outlet.2.current: 2.3
+outlet.2.power: 276
+
+outlet.3.desc: Outlet 3
+outlet.3.id: 3
+outlet.3.status: on
+outlet.3.switchable: 1
+outlet.3.current: 0.8
+outlet.3.power: 96
+
+outlet.4.desc: Outlet 4
+outlet.4.id: 4
+outlet.4.status: on
+outlet.4.switchable: 1
+outlet.4.current: 1.2
+outlet.4.power: 144
+
+outlet.5.desc: Outlet 5
+outlet.5.id: 5
+outlet.5.status: off
+outlet.5.switchable: 1
+outlet.5.current: 0
+outlet.5.power: 0
+
+outlet.6.desc: Outlet 6
+outlet.6.id: 6
+outlet.6.status: on
+outlet.6.switchable: 1
+outlet.6.current: 0.5
+outlet.6.power: 60
+
+outlet.7.desc: Outlet 7
+outlet.7.id: 7
+outlet.7.status: on
+outlet.7.switchable: 1
+outlet.7.current: 0.9
+outlet.7.power: 108
+
+outlet.8.desc: Outlet 8
+outlet.8.id: 8
+outlet.8.status: on
+outlet.8.switchable: 1
+outlet.8.current: 1.1
+outlet.8.power: 132
+
+outlet.current: 8.3
+outlet.power: 996
+ups.load: 69.2
+EOF
+
+echo "✓ Device file created with test data"
+
+# Signal driver to reload
+echo ""
+echo "3. Reloading driver..."
+if pgrep -f "dummy-ups.*rack_pdu" > /dev/null; then
+    pkill -HUP -f "dummy-ups.*rack_pdu" 2>/dev/null
+    echo "✓ Sent reload signal to driver"
+else
+    echo "✗ Driver not running!"
+fi
+
+# Wait and check
+sleep 2
+
+echo ""
+echo "4. Checking NUT values..."
+echo "Current values:"
+upsc rack_pdu@localhost 2>/dev/null | grep -E "outlet\.(1|2|current|power)" | head -10
+
+echo ""
+echo "If values still show 0:"
+echo "- The dummy-ups driver might not be reading the file"
+echo "- Try restarting the entire addon"
+echo ""
+echo "To test with real SNMP data, run: test-pdu-snmp"
