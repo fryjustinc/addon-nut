@@ -15,7 +15,7 @@ RUN \
         powerman \
         usbutils=1:018-2 \
         expect \
-        telnet \
+        inetutils-telnet \
         netcat-openbsd \
         snmp \
         procps \
@@ -54,6 +54,7 @@ RUN chmod +x /usr/bin/notify \
     && chmod +x /usr/bin/debug-powerman-pdu 2>/dev/null || true \
     && chmod +x /usr/bin/diagnose-powerman 2>/dev/null || true \
     && chmod +x /usr/bin/test-powermand-binary 2>/dev/null || true \
+    && chmod +x /usr/bin/test-apc-telnet 2>/dev/null || true \
     && chmod +x /usr/bin/test-apc-ap7900b 2>/dev/null || true \
     && chmod +x /usr/bin/test-snmp-ups 2>/dev/null || true \
     && chmod +x /usr/bin/cleanup-old-files 2>/dev/null || true \

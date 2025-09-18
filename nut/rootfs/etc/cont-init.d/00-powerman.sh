@@ -33,6 +33,20 @@ bashio::log.info "Configuring PowerMan daemon..."
 # Create powerman config directory if it doesn't exist
 mkdir -p /etc/powerman/devices
 
+# Find telnet binary
+TELNET_CMD=""
+if [ -x /usr/bin/telnet ]; then
+    TELNET_CMD="/usr/bin/telnet"
+elif [ -x /bin/telnet ]; then
+    TELNET_CMD="/bin/telnet"
+elif command -v telnet &>/dev/null; then
+    TELNET_CMD="$(which telnet)"
+else
+    bashio::log.error "telnet command not found! PowerMan may not work correctly."
+    TELNET_CMD="telnet"  # Fallback to hoping it's in PATH
+fi
+bashio::log.info "Using telnet at: ${TELNET_CMD}"
+
 # Start building the powerman.conf file
 cat > /etc/powerman/powerman.conf << 'EOF'
 # PowerMan configuration for NUT addon
@@ -77,7 +91,8 @@ if bashio::config.has_value 'powerman_pdu_name' && \
         "apc"|"apcpdu"|"apc7900"|"apc7900b"|"apc7920"|"apc7940"|"apc8959")
             # APC PDUs via telnet
             bashio::log.info "Configuring APC PDU via telnet"
-            echo "device \"${pdu_name}\" \"apcpdu3\" \"telnet:${pdu_host}:23 |&\"" >> /etc/powerman/powerman.conf
+            # PowerMan needs the full path to telnet or it needs to be a pipe command
+            echo "device \"${pdu_name}\" \"apcpdu3\" \"|${TELNET_CMD} ${pdu_host} 23 |&\"" >> /etc/powerman/powerman.conf
             ;;
         "ipmipower")
             # IPMI-based PDUs
@@ -152,7 +167,7 @@ for device in $(bashio::config "devices|keys"); do
             # For APC PDUs, use telnet connection
             if [[ "${pdu_type}" == "apc"* ]]; then
                 bashio::log.info "Adding APC PDU device via telnet: ${name}"
-                echo "device \"${name}\" \"apcpdu3\" \"telnet:${pdu_dev}:23 |&\"" >> /etc/powerman/powerman.conf
+                echo "device \"${name}\" \"apcpdu3\" \"|${TELNET_CMD} ${pdu_dev} 23 |&\"" >> /etc/powerman/powerman.conf
             else
                 echo "device \"${name}\" \"${pdu_type}\" \"${pdu_dev}\"" >> /etc/powerman/powerman.conf
             fi
@@ -161,7 +176,7 @@ for device in $(bashio::config "devices|keys"); do
             bashio::log.warning "PDU device ${name} missing connection info"
             # Try a default configuration for testing with telnet for APC AP7900B
             bashio::log.info "Attempting default telnet configuration for ${name}"
-            echo "device \"${name}\" \"apcpdu3\" \"telnet:192.168.51.124:23 |&\"" >> /etc/powerman/powerman.conf
+            echo "device \"${name}\" \"apcpdu3\" \"|${TELNET_CMD} 192.168.51.124 23 |&\"" >> /etc/powerman/powerman.conf
             echo "node \"[1-8]\" \"${name}\"" >> /etc/powerman/powerman.conf
         fi
     fi

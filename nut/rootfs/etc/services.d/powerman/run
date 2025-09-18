@@ -1,62 +1,11 @@
 #!/command/with-contenv bashio
 # ==============================================================================
 # Home Assistant Community Add-on: Network UPS Tools
-# Run PowerMan daemon if needed
+# PowerMan service disabled - PowerMan is started in init script
 # ==============================================================================
 
-# Check if we need PowerMan
-has_powerman=false
+# This service is disabled because PowerMan is started in the init script
+# /etc/cont-init.d/00-powerman.sh to ensure proper startup order
 
-# Check the explicit powerman_enabled flag
-if bashio::config.has_value 'powerman_enabled' && bashio::config.true 'powerman_enabled' ;then
-    has_powerman=true
-fi
-
-# Also check if any device uses the powerman-pdu driver
-for device in $(bashio::config "devices|keys"); do
-    driver=$(bashio::config "devices[${device}].driver")
-    if [[ "${driver}" == "powerman-pdu" ]]; then
-        has_powerman=true
-        break
-    fi
-done
-
-if [[ "${has_powerman}" == "false" ]]; then
-    bashio::log.info "PowerMan not needed, sleeping..."
-    exec sleep 864000
-fi
-
-# Wait for configuration to be ready
-if [ ! -f /etc/powerman/powerman.conf ]; then
-    bashio::log.info "Waiting for PowerMan configuration..."
-    for i in {1..30}; do
-        if [ -f /etc/powerman/powerman.conf ]; then
-            break
-        fi
-        sleep 1
-    done
-fi
-
-if [ ! -f /etc/powerman/powerman.conf ]; then
-    bashio::log.error "PowerMan configuration not found after 30 seconds!"
-    exec sleep 864000
-fi
-
-bashio::log.info "Starting PowerMan daemon (supervised)..."
-
-# Make sure the run directory exists
-mkdir -p /var/run/powerman
-
-# PowerMan doesn't have a foreground mode flag, so we need to run it differently
-# We'll run it in debug mode which keeps it in foreground
-bashio::log.info "Starting PowerMan with config: /etc/powerman/powerman.conf"
-
-# Show configuration for debugging
-if bashio::debug; then
-    bashio::log.debug "PowerMan configuration:"
-    cat /etc/powerman/powerman.conf
-fi
-
-# Run in debug mode (stays in foreground) with stderr redirected to stdout
-# The -d flag with debug level keeps it in foreground
-exec /usr/sbin/powermand -d -c /etc/powerman/powerman.conf 2>&1
+bashio::log.info "PowerMan service disabled (started in init script)"
+exec sleep 864000

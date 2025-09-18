@@ -1,0 +1,99 @@
+#!/bin/bash
+# Test telnet connection to APC PDU
+
+PDU_HOST="${1:-192.168.51.124}"
+PDU_PORT="${2:-23}"
+
+echo "=== Testing Telnet Connection to PDU ==="
+echo "Host: ${PDU_HOST}"
+echo "Port: ${PDU_PORT}"
+echo ""
+
+# Find telnet command
+TELNET_CMD=""
+for path in /usr/bin/telnet /bin/telnet; do
+    if [ -x "$path" ]; then
+        TELNET_CMD="$path"
+        break
+    fi
+done
+
+if [ -z "$TELNET_CMD" ]; then
+    if command -v telnet &>/dev/null; then
+        TELNET_CMD="$(which telnet)"
+    else
+        echo "ERROR: telnet command not found!"
+        echo "Checking package installation..."
+        dpkg -l | grep telnet || echo "No telnet packages found"
+        exit 1
+    fi
+fi
+
+echo "Using telnet at: ${TELNET_CMD}"
+echo ""
+
+echo "Testing connection (will timeout in 5 seconds)..."
+echo "Sending username 'apc' and password 'apc'..."
+echo ""
+
+# Create expect script for APC login
+cat > /tmp/test_apc.exp << 'EOF'
+#!/usr/bin/expect -f
+set timeout 10
+set host [lindex $argv 0]
+set port [lindex $argv 1]
+set telnet_cmd [lindex $argv 2]
+
+spawn $telnet_cmd $host $port
+
+expect {
+    timeout { 
+        puts "\nTimeout waiting for login prompt"
+        exit 1
+    }
+    "User Name" {
+        send "apc\r"
+        exp_continue
+    }
+    "Password" {
+        send "apc\r"
+        exp_continue
+    }
+    ">" {
+        puts "\nSuccessfully logged into APC PDU!"
+        send "olStatus all\r"
+        expect ">"
+        send "quit\r"
+        expect eof
+        exit 0
+    }
+}
+EOF
+
+if command -v expect &>/dev/null; then
+    echo "Using expect to automate login..."
+    chmod +x /tmp/test_apc.exp
+    /tmp/test_apc.exp "${PDU_HOST}" "${PDU_PORT}" "${TELNET_CMD}"
+    RESULT=$?
+    rm -f /tmp/test_apc.exp
+    
+    if [ $RESULT -eq 0 ]; then
+        echo ""
+        echo "✓ Successfully connected and authenticated to APC PDU"
+    else
+        echo ""
+        echo "✗ Failed to connect or authenticate to APC PDU"
+    fi
+else
+    echo "Expect not found, trying manual connection..."
+    echo "You'll need to manually enter:"
+    echo "  Username: apc"
+    echo "  Password: apc"
+    echo "  Then type: olStatus all"
+    echo "  Then type: quit"
+    echo ""
+    timeout 15 ${TELNET_CMD} ${PDU_HOST} ${PDU_PORT}
+fi
+
+echo ""
+echo "=== Test Complete ==="
