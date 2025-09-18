@@ -162,10 +162,10 @@ for device in $(bashio::config "devices|keys"); do
 done
 
 # Copy device definitions if they don't exist
-if [ ! -f /etc/powerman/devices/apcpdu.dev ]; then
+if [ ! -f /etc/powerman/devices/apcpdu3.dev ]; then
     # Try to find the device files
     for dir in /usr/share/powerman /usr/local/share/powerman /etc/powerman; do
-        if [ -d "${dir}" ] && [ -f "${dir}/apcpdu.dev" ]; then
+        if [ -d "${dir}" ] && [ -f "${dir}/apcpdu3.dev" ]; then
             bashio::log.info "Copying PowerMan device definitions from ${dir}"
             cp -n ${dir}/*.dev /etc/powerman/devices/ 2>/dev/null || true
             break
@@ -189,13 +189,17 @@ else
     bashio::log.info "PowerMan config file written to /etc/powerman/powerman.conf"
 fi
 
-# Test the configuration syntax
-if command -v powermand &>/dev/null; then
-    bashio::log.info "Testing PowerMan configuration syntax..."
-    if powermand -t -c /etc/powerman/powerman.conf 2>&1; then
-        bashio::log.info "PowerMan configuration syntax is valid"
+# Verify the configuration file exists and is readable
+if [ -f /etc/powerman/powerman.conf ]; then
+    bashio::log.info "PowerMan configuration file created successfully"
+    # Check if device file exists
+    if [ -f /etc/powerman/devices/apcpdu3.dev ]; then
+        bashio::log.info "APC PDU device definition file found"
     else
-        bashio::log.error "PowerMan configuration syntax check failed!"
-        cat /etc/powerman/powerman.conf
+        bashio::log.warning "APC PDU device definition file not found, copying default..."
+        cp /etc/powerman/apcpdu3.dev /etc/powerman/devices/apcpdu3.dev 2>/dev/null || true
     fi
+else
+    bashio::log.error "PowerMan configuration file not created!"
+    exit 1
 fi

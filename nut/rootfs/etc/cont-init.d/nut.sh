@@ -147,8 +147,21 @@ if bashio::config.equals 'mode' 'netserver' ;then
     # Run upsdrvctl
     if bashio::debug; then
         upsdrvctl -u root -D start
+        DRIVER_START_RESULT=$?
     else
         upsdrvctl -u root start
+        DRIVER_START_RESULT=$?
+    fi
+    
+    # Check if drivers started successfully
+    if [ ${DRIVER_START_RESULT} -ne 0 ]; then
+        bashio::log.error "Failed to start UPS drivers! (exit code: ${DRIVER_START_RESULT})"
+        bashio::log.info "Checking driver status..."
+        upsdrvctl -u root status 2>&1 || true
+        # Don't exit with error for now - let's see what happens
+        # exit 1
+    else
+        bashio::log.info "UPS drivers started successfully"
     fi
 fi
 

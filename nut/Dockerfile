@@ -25,14 +25,18 @@ RUN \
 COPY rootfs /
 
 # Create symlinks for powerman-pdu driver if needed
-# Check if the driver exists in /lib/nut and create symlink only if needed
+# The driver can be in various locations depending on the distribution
 RUN mkdir -p /usr/lib/nut \
-    && if [ -f /lib/nut/powerman-pdu ] && [ ! -e /usr/lib/nut/powerman-pdu ]; then \
-        ln -s /lib/nut/powerman-pdu /usr/lib/nut/powerman-pdu; \
-    fi \
-    && echo "PowerMan driver location:" \
-    && ls -la /lib/nut/powerman-pdu 2>/dev/null || true \
-    && ls -la /usr/lib/nut/powerman-pdu 2>/dev/null || true
+    && for src in /lib/nut/powerman-pdu /usr/lib/*/nut/powerman-pdu /usr/lib/nut-2.8.1/powerman-pdu; do \
+        if [ -f "$src" ] && [ ! -e /usr/lib/nut/powerman-pdu ]; then \
+            echo "Found powerman-pdu driver at $src, creating symlink..." \
+            && ln -s "$src" /usr/lib/nut/powerman-pdu; \
+        fi; \
+    done \
+    && echo "PowerMan driver search:" \
+    && find / -name "powerman-pdu" 2>/dev/null | head -5 || true \
+    && echo "NUT driver directory contents:" \
+    && ls -la /lib/nut/ 2>/dev/null | grep -E "(powerman|snmp)" || true
 
 # Make scripts executable and fix permissions
 RUN chmod +x /usr/bin/notify \
@@ -41,9 +45,11 @@ RUN chmod +x /usr/bin/notify \
     && chmod +x /usr/bin/test-powerman-pdu 2>/dev/null || true \
     && chmod +x /usr/bin/test-apc-ap7900b 2>/dev/null || true \
     && chmod +x /usr/bin/test-snmp-ups 2>/dev/null || true \
+    && chmod +x /usr/bin/cleanup-old-files 2>/dev/null || true \
     && chmod +x /etc/services.d/*/run \
     && chmod +x /etc/services.d/*/finish \
     && chmod +x /etc/cont-init.d/*.sh \
+    && rm -f /etc/cont-init.d/powerman.sh.old 2>/dev/null || true \
     && mkdir -p /var/run/nut \
     && chmod 0770 /var/run/nut
 

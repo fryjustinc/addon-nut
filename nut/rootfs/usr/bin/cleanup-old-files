@@ -1,0 +1,16 @@
+#!/bin/bash
+# ==============================================================================
+# Simple test script to manually remove the old powerman.sh file
+# This can be run from the addon terminal
+# ==============================================================================
+
+if [ -f /etc/cont-init.d/powerman.sh.old ]; then
+    echo "Removing old powerman.sh.old file..."
+    rm -f /etc/cont-init.d/powerman.sh.old
+    echo "Cleaned up old file"
+else
+    echo "No old file to remove"
+fi
+
+echo "Current init scripts:"
+ls -la /etc/cont-init.d/
