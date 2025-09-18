@@ -23,16 +23,22 @@ RUN \
 # Copy root filesystem
 COPY rootfs /
 
-# Create symlinks for powerman-pdu driver (installed in /lib/nut by Debian package)
+# Create symlinks for powerman-pdu driver if needed
+# Check if the driver exists in /lib/nut and create symlink only if needed
 RUN mkdir -p /usr/lib/nut \
-    && ln -s /lib/nut/powerman-pdu /usr/lib/nut/powerman-pdu
+    && if [ -f /lib/nut/powerman-pdu ] && [ ! -e /usr/lib/nut/powerman-pdu ]; then \
+        ln -s /lib/nut/powerman-pdu /usr/lib/nut/powerman-pdu; \
+    fi \
+    && echo "PowerMan driver location:" \
+    && ls -la /lib/nut/powerman-pdu 2>/dev/null || true \
+    && ls -la /usr/lib/nut/powerman-pdu 2>/dev/null || true
 
 # Make scripts executable and fix permissions
 RUN chmod +x /usr/bin/notify \
     && chmod +x /usr/bin/shutdownhost \
-    && chmod +x /usr/bin/test-powerman \
-    && chmod +x /usr/bin/test-apc-ap7900b \
-    && chmod +x /usr/bin/test-snmp-ups \
+    && chmod +x /usr/bin/test-powerman 2>/dev/null || true \
+    && chmod +x /usr/bin/test-apc-ap7900b 2>/dev/null || true \
+    && chmod +x /usr/bin/test-snmp-ups 2>/dev/null || true \
     && chmod +x /etc/services.d/*/run \
     && chmod +x /etc/services.d/*/finish \
     && chmod +x /etc/cont-init.d/*.sh \
