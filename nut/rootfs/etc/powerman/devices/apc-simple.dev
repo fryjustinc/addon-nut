@@ -35,14 +35,15 @@ specification "apc-simple" {
         send "\r\n"
         expect ">"
         # For now, just assume all outlets are ON
-        setplugstate "1" "ON" on="ON" off="OFF"
-        setplugstate "2" "ON" on="ON" off="OFF"
-        setplugstate "3" "ON" on="ON" off="OFF"
-        setplugstate "4" "ON" on="ON" off="OFF"
-        setplugstate "5" "ON" on="ON" off="OFF"
-        setplugstate "6" "ON" on="ON" off="OFF"
-        setplugstate "7" "ON" on="ON" off="OFF"
-        setplugstate "8" "ON" on="ON" off="OFF"
+        # Using simplified setplugstate without attributes
+        setplugstate "1" "on"
+        setplugstate "2" "on"
+        setplugstate "3" "on"
+        setplugstate "4" "on"
+        setplugstate "5" "on"
+        setplugstate "6" "on"
+        setplugstate "7" "on"
+        setplugstate "8" "on"
     }
     
     # Turn on an outlet
