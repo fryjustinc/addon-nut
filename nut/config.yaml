@@ -35,6 +35,14 @@ options:
       config: []
   mode: netserver
   shutdown_host: "false"
+  # Optional PowerMan helpers
+  powerman_enabled: false
+  powerman_pdu_name: "rack_pdu"
+  powerman_pdu_host: ""
+  # Optional SNMP and power estimation settings for PDUs
+  snmp_community: "public"
+  snmp_version: "v1"
+  pdu_voltage: 120
 schema:
   log_level: list(trace|debug|info|notice|warning|error|fatal)?
   users:
@@ -59,6 +67,9 @@ schema:
   powerman_pdu_username: str?
   powerman_pdu_password: password?
   powerman_pdu_nodes: str?
+  snmp_community: str?
+  snmp_version: list(v1|v2c|v3)?
+  pdu_voltage: int?
   mode: list(netserver|netclient)
   shutdown_host: bool
   list_usb_devices: bool?

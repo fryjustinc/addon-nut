@@ -94,7 +94,12 @@ if bashio::config.has_value 'powerman_pdu_name' && \
             # APC PDUs via telnet
             bashio::log.info "Configuring APC PDU via telnet"
             # PowerMan needs the full path to telnet or it needs to be a pipe command
-            echo "device \"${pdu_name}\" \"apcpdu3\" \"|${TELNET_CMD} ${pdu_host} 23 |&\"" >> /etc/powerman/powerman.conf
+            # apcpdu3 provides reliable APC telnet handling; include login if provided
+            if [[ -n "${pdu_username}" ]] && [[ -n "${pdu_password}" ]]; then
+                echo "device \"${pdu_name}\" \"apcpdu3\" \"|${TELNET_CMD} ${pdu_host} 23 |&\"" >> /etc/powerman/powerman.conf
+            else
+                echo "device \"${pdu_name}\" \"apcpdu3\" \"|${TELNET_CMD} ${pdu_host} 23 |&\"" >> /etc/powerman/powerman.conf
+            fi
             ;;
         "apc-simple")
             # Use apcpdu3 instead of the broken apc-simple

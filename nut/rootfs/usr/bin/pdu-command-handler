@@ -5,6 +5,7 @@
 # Get command from environment or arguments
 UPSNAME="${1:-${UPSNAME}}"
 CMDNAME="${2:-${CMDNAME}}"
+PDU_NAME="${UPSNAME}"
 
 # Extract outlet number from command if present
 OUTLET=""
@@ -23,13 +24,13 @@ echo "$(date) Command: UPS=${UPSNAME} CMD=${CMDNAME} OUTLET=${OUTLET} ACTION=${A
 if [ -n "${OUTLET}" ] && [ -n "${ACTION}" ]; then
     case "${ACTION}" in
         "on")
-            RESULT=$(echo "on rack_pdu ${OUTLET}" | nc -w 2 127.0.0.1 10101 2>&1)
+            RESULT=$(echo "on ${PDU_NAME} ${OUTLET}" | nc -w 2 127.0.0.1 10101 2>&1)
             ;;
         "off")  
-            RESULT=$(echo "off rack_pdu ${OUTLET}" | nc -w 2 127.0.0.1 10101 2>&1)
+            RESULT=$(echo "off ${PDU_NAME} ${OUTLET}" | nc -w 2 127.0.0.1 10101 2>&1)
             ;;
         "cycle")
-            RESULT=$(echo "cycle rack_pdu ${OUTLET}" | nc -w 2 127.0.0.1 10101 2>&1)
+            RESULT=$(echo "cycle ${PDU_NAME} ${OUTLET}" | nc -w 2 127.0.0.1 10101 2>&1)
             ;;
     esac
     

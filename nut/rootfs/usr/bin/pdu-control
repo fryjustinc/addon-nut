@@ -7,7 +7,7 @@
 
 COMMAND="$1"
 OUTLET="$2"
-PDU_NAME="rack_pdu"
+PDU_NAME="${3:-rack_pdu}"
 
 # Log the command
 echo "$(date) PDU Control: Command=$COMMAND Outlet=$OUTLET" >> /var/log/pdu-control.log

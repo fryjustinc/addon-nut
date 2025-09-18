@@ -4,9 +4,23 @@
 # Simplified PowerMan to NUT PDU Sync Service
 # ==============================================================================
 
-# Only run if PowerMan is enabled
-if ! bashio::config.true 'powerman_enabled'; then
-    bashio::log.info "PowerMan sync service not needed (PowerMan disabled)"
+# Determine if PowerMan is needed: explicit flag or presence of powerman-pdu device
+needs_powerman=false
+if bashio::config.true 'powerman_enabled'; then
+    needs_powerman=true
+fi
+if [[ "${needs_powerman}" != "true" ]]; then
+    for device in $(bashio::config "devices|keys"); do
+        driver=$(bashio::config "devices[${device}].driver")
+        if [[ "${driver}" == "powerman-pdu" ]]; then
+            needs_powerman=true
+            break
+        fi
+    done
+fi
+
+if [[ "${needs_powerman}" != "true" ]]; then
+    bashio::log.info "PowerMan sync service not needed (no PowerMan configuration)"
     exec sleep 864000
 fi
 
@@ -22,32 +36,44 @@ fi
 
 bashio::log.info "PowerMan-NUT sync service started"
 
-# Get PDU configuration
-PDU_HOST=$(bashio::config 'powerman_pdu_host' || echo "192.168.51.124")
-PDU_NAME=$(bashio::config 'powerman_pdu_name' || echo "rack_pdu")
+# Get global PDU/SNMP configuration (can be overridden per device)
+DEFAULT_PDU_HOST=$(bashio::config 'powerman_pdu_host' || echo "192.168.51.124")
+DEFAULT_PDU_NAME=$(bashio::config 'powerman_pdu_name' || echo "rack_pdu")
+SNMP_COMMUNITY=$(bashio::config 'snmp_community' || echo "public")
+SNMP_VERSION=$(bashio::config 'snmp_version' || echo "v1")
+PDU_VOLTAGE=$(bashio::config 'pdu_voltage' || echo "120")
 
-bashio::log.info "Monitoring PDU: ${PDU_NAME} at ${PDU_HOST}"
-
-# Main sync loop
 while true; do
-    # Check if we have any rack_pdu device file
-    if [ -f /etc/nut/rack_pdu.dev ]; then
-        # Query PowerMan for PDU status
-        PDU_STATUS=""
-        
-        # Try using netcat to get status
-        PDU_STATUS=$(echo "query ${PDU_NAME}" | nc -w 2 127.0.0.1 10101 2>/dev/null || true)
-        
-        if [ -z "${PDU_STATUS}" ]; then
-            bashio::log.warning "Failed to query PowerMan, retrying..."
-            sleep 5
+    # Iterate over configured devices and update dummy-ups files if present
+    updated_any=false
+    for device in $(bashio::config "devices|keys"); do
+        upsname=$(bashio::config "devices[${device}].name")
+        upsdriver=$(bashio::config "devices[${device}].driver")
+        devfile="/etc/nut/${upsname}.dev"
+        pdu_host="${DEFAULT_PDU_HOST}"
+        pdu_name="${DEFAULT_PDU_NAME}"
+
+        # Prefer using the UPS name as the PDU name when powerman-pdu device exists
+        if [[ "${upsdriver}" == "powerman-pdu" ]]; then
+            pdu_name="${upsname}"
+        fi
+
+        # Only operate for devices that have a dummy-ups dev file (aggregated metrics mode)
+        if [ ! -f "${devfile}" ]; then
             continue
         fi
-        
-        bashio::log.debug "PowerMan status: ${PDU_STATUS}"
-        
+
+        # Query PowerMan for PDU status
+        PDU_STATUS=$(echo "query ${pdu_name}" | nc -w 2 127.0.0.1 10101 2>/dev/null || true)
+        if [ -z "${PDU_STATUS}" ]; then
+            bashio::log.warning "Failed to query PowerMan for ${pdu_name}, skipping"
+            continue
+        fi
+
+        bashio::log.debug "PowerMan status (${pdu_name}): ${PDU_STATUS}"
+
         # Create new status file with basic info
-        cat > /tmp/rack_pdu.dev.new << 'EOF'
+        cat > "/tmp/${upsname}.dev.new" << 'EOF'
 # APC AP7900B PDU via PowerMan
 # Auto-generated - do not edit manually
 device.mfr: APC
@@ -56,7 +82,7 @@ device.serial: PowerMan-Managed
 device.type: pdu
 driver.name: dummy-ups
 driver.parameter.mode: dummy
-driver.parameter.port: rack_pdu.dev
+driver.parameter.port: DUMMY_DEV_FILE
 driver.version: 2.8.1
 
 # Overall PDU status
@@ -69,25 +95,18 @@ outlet.id: 0
 outlet.switchable: 1
 
 EOF
-        
+        # Fix the dummy device file reference
+        sed -i "s#driver.parameter.port: DUMMY_DEV_FILE#driver.parameter.port: ${upsname}.dev#g" "/tmp/${upsname}.dev.new"
+
         # Parse outlet status from PowerMan
-        # PowerMan typically returns format like: rack_pdu: 1=on 2=on 3=off ...
         for i in {1..8}; do
-            STATUS="on"  # Default to on
-            
-            # Check PowerMan output for this outlet
-            if echo "${PDU_STATUS}" | grep -q "${i}=on"; then
-                STATUS="on"
-            elif echo "${PDU_STATUS}" | grep -q "${i}=off"; then
-                STATUS="off"
-            elif echo "${PDU_STATUS}" | grep -q "outlet${i}=on"; then
-                STATUS="on"
-            elif echo "${PDU_STATUS}" | grep -q "outlet${i}=off"; then
-                STATUS="off"
-            fi
-            
-            # Write outlet information
-            cat >> /tmp/rack_pdu.dev.new << EOF
+            STATUS="on"
+            if echo "${PDU_STATUS}" | grep -q "${i}=on"; then STATUS="on"; fi
+            if echo "${PDU_STATUS}" | grep -q "${i}=off"; then STATUS="off"; fi
+            if echo "${PDU_STATUS}" | grep -q "outlet${i}=on"; then STATUS="on"; fi
+            if echo "${PDU_STATUS}" | grep -q "outlet${i}=off"; then STATUS="off"; fi
+
+            cat >> "/tmp/${upsname}.dev.new" << EOF
 # Outlet ${i}
 outlet.${i}.desc: Outlet ${i}
 outlet.${i}.id: ${i}
@@ -97,11 +116,11 @@ outlet.${i}.switchable: 1
 EOF
         done
         
-        # Try SNMP for current/power if available
+        # Try SNMP for current/power if available (many AP7900B units do not report per-outlet current)
         SNMP_WORKS=false
         if command -v snmpget &>/dev/null; then
             # Test SNMP connectivity
-            if timeout 2 snmpget -v1 -c public ${PDU_HOST} sysDescr.0 2>/dev/null | grep -q "APC"; then
+            if timeout 2 snmpget -v1 -c "${SNMP_COMMUNITY}" ${pdu_host} sysDescr.0 2>/dev/null | grep -q "APC"; then
                 SNMP_WORKS=true
                 bashio::log.debug "SNMP connection successful"
             else
@@ -116,21 +135,21 @@ EOF
             # Add current/power data for each outlet
             for i in {1..8}; do
                 # Get current (in deciamps, convert to amps)
-                CURRENT_RAW=$(snmpget -v1 -c public -Ovq ${PDU_HOST} .1.3.6.1.4.1.318.1.1.12.2.3.1.1.2.1.${i} 2>/dev/null | grep -oE '[0-9]+' || echo "0")
+                CURRENT_RAW=$(snmpget -v1 -c "${SNMP_COMMUNITY}" -Ovq ${pdu_host} .1.3.6.1.4.1.318.1.1.12.2.3.1.1.2.1.${i} 2>/dev/null | grep -oE '[0-9]+' || echo "0")
                 
                 if [ "${CURRENT_RAW}" != "0" ] && [ -n "${CURRENT_RAW}" ]; then
                     CURRENT=$(echo "scale=2; ${CURRENT_RAW} / 10" | bc 2>/dev/null || echo "0")
                     TOTAL_CURRENT=$(echo "scale=2; ${TOTAL_CURRENT} + ${CURRENT}" | bc 2>/dev/null || echo "0")
                     
-                    # Estimate power (current * 120V)
-                    POWER=$(echo "scale=0; ${CURRENT} * 120" | bc 2>/dev/null || echo "0")
+                    # Estimate power (current * voltage)
+                    POWER=$(echo "scale=0; ${CURRENT} * ${PDU_VOLTAGE}" | bc 2>/dev/null || echo "0")
                     TOTAL_POWER=$(echo "${TOTAL_POWER} + ${POWER}" | bc 2>/dev/null || echo "0")
                     
                     # Append to outlet section
-                    cat >> /tmp/rack_pdu.dev.new << EOF
+                    cat >> "/tmp/${upsname}.dev.new" << EOF
 outlet.${i}.current: ${CURRENT}
 outlet.${i}.power: ${POWER}
-outlet.${i}.voltage: 120
+outlet.${i}.voltage: ${PDU_VOLTAGE}
 
 EOF
                 fi
@@ -138,12 +157,12 @@ EOF
             
             # Add total metrics if we got any data
             if [ "${TOTAL_CURRENT}" != "0" ]; then
-                cat >> /tmp/rack_pdu.dev.new << EOF
+                cat >> "/tmp/${upsname}.dev.new" << EOF
 # Total PDU metrics
 outlet.current: ${TOTAL_CURRENT}
 outlet.power: ${TOTAL_POWER}
-outlet.voltage: 120
-ups.load: $(echo "scale=1; ${TOTAL_POWER} / 1440 * 100" | bc 2>/dev/null || echo "0")
+outlet.voltage: ${PDU_VOLTAGE}
+ups.load: $(echo "scale=1; ${TOTAL_POWER} / ($PDU_VOLTAGE*12) * 100" | bc 2>/dev/null || echo "0")
 
 EOF
             fi
@@ -152,19 +171,19 @@ EOF
         fi
         
         # Atomically update the file
-        mv /tmp/rack_pdu.dev.new /etc/nut/rack_pdu.dev 2>/dev/null || true
-        
+        mv "/tmp/${upsname}.dev.new" "${devfile}" 2>/dev/null || true
+
         # Signal dummy-ups driver to reload (if running)
-        if pgrep -f "dummy-ups.*rack_pdu" > /dev/null; then
-            # Send HUP signal to reload configuration
-            pkill -HUP -f "dummy-ups.*rack_pdu" 2>/dev/null || true
+        if pgrep -f "dummy-ups.*${upsname}" > /dev/null; then
+            pkill -HUP -f "dummy-ups.*${upsname}" 2>/dev/null || true
         fi
-        
-        bashio::log.debug "PDU status updated"
-    else
-        bashio::log.warning "No rack_pdu.dev file found, waiting..."
+
+        updated_any=true
+    done
+
+    if [[ "${updated_any}" != "true" ]]; then
+        bashio::log.debug "No dummy PDU device files to update"
     fi
-    
-    # Sleep for 15 seconds before next update
+
     sleep 15
 done
