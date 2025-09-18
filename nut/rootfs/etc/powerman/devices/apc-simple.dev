@@ -1,0 +1,99 @@
+# Simple APC PDU device for PowerMan - basic telnet version
+
+specification "apc-simple" {
+    timeout 20.0
+    
+    plug name { "1" "2" "3" "4" "5" "6" "7" "8" }
+    
+    # Simple login script
+    script login {
+        delay 1.0
+        send "\r\n"
+        expect "User Name"
+        send "apc\r\n"
+        expect "Password"
+        send "apc\r\n"
+        expect ">"
+    }
+    
+    # Logout
+    script logout {
+        send "\033"
+        delay 0.5
+        send "\033"
+        delay 0.5
+        send "\033"
+        delay 0.5
+        send "4\r\n"
+        expect "YES"
+        send "YES\r\n"
+    }
+    
+    # Simple status check - assumes all outlets are ON
+    script status_all {
+        delay 0.5
+        send "\r\n"
+        expect ">"
+        # For now, just assume all outlets are ON
+        setplugstate "1" "ON" on="ON" off="OFF"
+        setplugstate "2" "ON" on="ON" off="OFF"
+        setplugstate "3" "ON" on="ON" off="OFF"
+        setplugstate "4" "ON" on="ON" off="OFF"
+        setplugstate "5" "ON" on="ON" off="OFF"
+        setplugstate "6" "ON" on="ON" off="OFF"
+        setplugstate "7" "ON" on="ON" off="OFF"
+        setplugstate "8" "ON" on="ON" off="OFF"
+    }
+    
+    # Turn on an outlet
+    script on {
+        send "1\r\n"
+        delay 0.5
+        expect ">"
+        send "1\r\n"
+        delay 0.5
+        expect ">"
+        send "2\r\n"
+        delay 0.5
+        expect ">"
+        send "%1\r\n"
+        delay 0.5
+        expect "YES"
+        send "YES\r\n"
+        delay 0.5
+        send "\r\n"
+        delay 0.5
+        send "\033"
+        delay 0.5
+        send "\033"
+        delay 0.5
+        send "\033"
+        delay 0.5
+    }
+    
+    # Turn off an outlet
+    script off {
+        send "1\r\n"
+        delay 0.5
+        expect ">"
+        send "1\r\n"
+        delay 0.5
+        expect ">"
+        send "3\r\n"
+        delay 0.5
+        expect ">"
+        send "%1\r\n"
+        delay 0.5
+        expect "YES"
+        send "YES\r\n"
+        delay 0.5
+        send "\r\n"
+        delay 0.5
+        send "\033"
+        delay 0.5
+        send "\033"
+        delay 0.5
+        send "\033"
+        delay 0.5
+    }
+}

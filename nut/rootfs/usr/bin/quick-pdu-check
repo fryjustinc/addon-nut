@@ -1,0 +1,55 @@
+#!/bin/bash
+# Quick check for PowerMan PDU connectivity
+
+echo "=== PowerMan PDU Quick Check ==="
+echo ""
+
+echo "1. Testing direct telnet to PDU (192.168.51.124:23)..."
+echo "   (Attempting connection, will timeout in 5 seconds)"
+(
+    sleep 1
+    echo "apc"
+    sleep 1
+    echo "apc"
+    sleep 1
+    echo "1"
+    sleep 1
+    echo -e "\033"
+    sleep 1
+    echo -e "\033"
+    sleep 1
+    echo "4"
+    sleep 1
+    echo "YES"
+) | timeout 10 telnet 192.168.51.124 23 2>&1 | head -50
+
+echo ""
+echo "2. PowerMan status check:"
+if command -v pm &>/dev/null; then
+    echo "   Testing pm -h localhost -q (query status):"
+    timeout 3 pm -h localhost -q 2>&1
+    echo ""
+    echo "   Testing pm -h localhost -Q (query all):"
+    timeout 3 pm -h localhost -Q 2>&1
+else
+    echo "   pm command not found"
+fi
+
+echo ""
+echo "3. Check powerman-pdu driver:"
+ps aux | grep powerman-pdu | grep -v grep || echo "   No powerman-pdu process found"
+
+echo ""
+echo "4. Test UPS status:"
+echo "   Testing: upsc rack_pdu"
+timeout 5 upsc rack_pdu 2>&1 | head -20
+
+echo ""
+echo "5. PowerMan log tail:"
+tail -20 /var/log/powerman.log 2>/dev/null || echo "   No log file"
+
+echo ""
+echo "=== End Quick Check ==="
+echo ""
+echo "If telnet connects but PowerMan fails, try using 'apc-simple' instead of 'apc7900b'"
+echo "in your configuration (powerman_pdu_type: apc-simple)"

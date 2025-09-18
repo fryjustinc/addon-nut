@@ -1,65 +1,133 @@
-# APC AP7900B (8-outlet Switched Rack PDU) device definition for PowerMan
-# This file defines the protocol for communicating with APC AP7900B PDUs
+# APC AP7900 series PDU device definition for PowerMan
+# Enhanced version with better error handling
 
 specification "apcpdu3" {
-    timeout 10.0
+    timeout 15.0
     
     plug name { "1" "2" "3" "4" "5" "6" "7" "8" }
     
     script login {
-        expect "User Name :*"
-        send "apc\r\n"
-        expect "Password  :*"
-        send "apc\r\n"
-        expect "> "
+        delay 0.5
+        send "\r"
+        expect "(User Name|Username|Login|>)"
+        send "apc\r"
+        expect "(Password|password)"
+        send "apc\r"
+        expect "(>|APC>)"
     }
     
     script logout {
-        send "quit\r\n"
+        send "exit\r"
+        expect "Connection closed"
     }
     
-    script status_all {
-        send "olStatus all\r\n"
-        expect "E000: Success\r\n"
-        foreachplug {
-            expect "([0-9]+): (On|Off).*\r\n"
-            setplugstate $1 $2 on="On" off="Off"
-        }
-        expect "> "
+    script status {
+        delay 0.1
+        send "1\r"
+        expect "Device Manager"
+        send "1\r"
+        expect "Outlet Management"
+        send "1\r"
+        expect "Outlet Control"
+        expect "([0-9]+)-.*(ON|OFF)"
+        setplugstate $1 $2 on="ON" off="OFF"
+        expect "([0-9]+)-.*(ON|OFF)"
+        setplugstate $1 $2 on="ON" off="OFF"
+        expect "([0-9]+)-.*(ON|OFF)"
+        setplugstate $1 $2 on="ON" off="OFF"
+        expect "([0-9]+)-.*(ON|OFF)"
+        setplugstate $1 $2 on="ON" off="OFF"
+        expect "([0-9]+)-.*(ON|OFF)"
+        setplugstate $1 $2 on="ON" off="OFF"
+        expect "([0-9]+)-.*(ON|OFF)"
+        setplugstate $1 $2 on="ON" off="OFF"
+        expect "([0-9]+)-.*(ON|OFF)"
+        setplugstate $1 $2 on="ON" off="OFF"
+        expect "([0-9]+)-.*(ON|OFF)"
+        setplugstate $1 $2 on="ON" off="OFF"
+        expect "Press <ENTER>"
+        send "\r"
+        expect ">"
+        send "\033"
+        expect ">"
+        send "\033"
+        expect ">"
+        send "\033"
+        expect ">"
     }
     
-    script on_ranged {
-        send "olOn "
-        foreachplug {
-            send "%s "
-        }
-        send "\r\n"
-        expect "E000: Success\r\n"
-        expect "> "
+    script on {
+        delay 0.1
+        send "1\r"
+        expect "Device Manager"
+        send "1\r"
+        expect "Outlet Management"
+        send "2\r"
+        expect "Outlet Control"
+        send "%1\r"
+        expect "Control Outlet"
+        send "1\r"
+        expect "turn outlet"
+        expect "(Enter 'YES'|Y/N)"
+        send "YES\r"
+        expect "Press <ENTER>"
+        send "\r"
+        expect ">"
+        send "\033"
+        expect ">"
+        send "\033"
+        expect ">"
+        send "\033"
+        expect ">"
     }
     
-    script off_ranged {
-        send "olOff "
-        foreachplug {
-            send "%s "
-        }
-        send "\r\n"
-        expect "E000: Success\r\n"
-        expect "> "
+    script off {
+        delay 0.1
+        send "1\r"
+        expect "Device Manager"
+        send "1\r"
+        expect "Outlet Management"
+        send "3\r"
+        expect "Outlet Control"
+        send "%1\r"
+        expect "Control Outlet"
+        send "1\r"
+        expect "turn outlet"
+        expect "(Enter 'YES'|Y/N)"
+        send "YES\r"
+        expect "Press <ENTER>"
+        send "\r"
+        expect ">"
+        send "\033"
+        expect ">"
+        send "\033"
+        expect ">"
+        send "\033"
+        expect ">"
     }
     
-    script cycle_ranged {
-        send "olReboot "
-        foreachplug {
-            send "%s "
-        }
-        send "\r\n"
-        expect "E000: Success\r\n"
-        expect "> "
+    script cycle {
+        delay 0.1
+        send "1\r"
+        expect "Device Manager"
+        send "1\r"
+        expect "Outlet Management"
+        send "4\r"
+        expect "Outlet Control"
+        send "%1\r"
+        expect "Control Outlet"
+        send "1\r"
+        expect "reboot outlet"
+        expect "(Enter 'YES'|Y/N)"
+        send "YES\r"
+        expect "Press <ENTER>"
+        send "\r"
+        expect ">"
+        send "\033"
+        expect ">"
+        send "\033"
+        expect ">"
+        send "\033"
+        expect ">"
     }
 }
-
-# Device instance configuration
-# This will be replaced by actual configuration from addon config
-# device "apc_pdu" "apcpdu3" "telnet:pdu-hostname:23 |&"
-# node "outlet[1-8]" "apc_pdu"
