@@ -194,24 +194,30 @@ if bashio::config.equals 'mode' 'netserver' ;then
             # Ensure PowerMan will be used and set a sensible default port if not provided
             has_powerman=true
             bashio::log.info "Configuring ${upsname} with powerman-pdu driver"
-            # Default host:port
+            # Default host:port with device selector
             if [[ -z "${upsport}" || "${upsport}" == "null" ]]; then
-                upsport="localhost:10101"
+                upsport="${upsname}@localhost:10101"
                 bashio::log.info "No port specified for ${upsname}, defaulting to ${upsport}"
             fi
-            # Convert powerman:// URL formats to host:port expected by driver
+            # Convert powerman:// URL formats to device@host:port expected by driver
             if [[ "${upsport}" =~ ^powerman:// ]]; then
                 rest="${upsport#powerman://}"
-                # Strip optional user@ part
+                device_part="${upsname}"
+                hostport_part="${rest}"
                 if [[ "${rest}" == *"@"* ]]; then
-                    rest="${rest#*@}"
+                    device_part="${rest%@*}"
+                    hostport_part="${rest#*@}"
                 fi
-                # If no port provided, default 10101
-                if [[ "${rest}" != *":"* ]]; then
-                    rest="${rest}:10101"
+                if [[ "${hostport_part}" != *":"* ]]; then
+                    hostport_part="${hostport_part}:10101"
                 fi
-                bashio::log.info "Normalizing powerman URL to host:port: ${rest}"
-                upsport="${rest}"
+                upsport="${device_part}@${hostport_part}"
+                bashio::log.info "Normalizing powerman URL to device@host:port: ${upsport}"
+            else
+                # If port lacks device prefix, add upsname@
+                if [[ "${upsport}" != *"@"* ]]; then
+                    upsport="${upsname}@${upsport}"
+                fi
             fi
         fi
         

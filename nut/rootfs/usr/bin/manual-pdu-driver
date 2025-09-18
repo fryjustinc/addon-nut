@@ -27,8 +27,7 @@ echo "3. Creating test configuration..."
 cat > /tmp/test-ups.conf << EOF
 [rack_pdu]
     driver = powerman-pdu
-    port = localhost:10101
-    username = rack_pdu
+    port = rack_pdu@localhost:10101
     desc = "Test PowerMan PDU"
     maxstartdelay = 90
     pollinterval = 5
