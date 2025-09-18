@@ -1,0 +1,74 @@
+#!/bin/bash
+# Test direct PowerMan connection
+
+echo "=================================="
+echo "Direct PowerMan Connection Test"
+echo "=================================="
+echo ""
+
+# Check if PowerMan is running
+echo "1. Checking PowerMan process..."
+if pgrep powermand > /dev/null; then
+    echo "✓ PowerMan daemon is running"
+else
+    echo "✗ PowerMan daemon is NOT running"
+    exit 1
+fi
+
+# Check if port is open
+echo ""
+echo "2. Checking PowerMan port..."
+if nc -z localhost 10101 2>/dev/null; then
+    echo "✓ Port 10101 is open"
+else
+    echo "✗ Port 10101 is NOT open"
+    exit 1
+fi
+
+# Try to connect with pm client
+echo ""
+echo "3. Testing with pm client..."
+if command -v pm &>/dev/null; then
+    echo "Running: pm -h localhost -l"
+    pm -h localhost -l 2>&1 | head -20
+else
+    echo "✗ pm client not found"
+fi
+
+# Try basic telnet test to PowerMan
+echo ""
+echo "4. Testing direct connection..."
+(
+    echo "help"
+    sleep 1
+) | nc -w 2 localhost 10101 2>&1 | head -20
+
+# Test query command
+echo ""
+echo "5. Testing query command..."
+(
+    echo "query rack_pdu"
+    sleep 1
+) | nc -w 2 localhost 10101 2>&1
+
+# Test status command
+echo ""
+echo "6. Testing status command..."
+(
+    echo "status rack_pdu"
+    sleep 1
+) | nc -w 2 localhost 10101 2>&1
+
+# Show PowerMan log
+echo ""
+echo "7. PowerMan log (last 20 lines):"
+if [ -f /var/log/powerman.log ]; then
+    tail -20 /var/log/powerman.log
+else
+    echo "No log file found"
+fi
+
+echo ""
+echo "=================================="
+echo "Test Complete"
+echo "=================================="

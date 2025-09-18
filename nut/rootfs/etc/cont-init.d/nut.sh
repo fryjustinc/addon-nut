@@ -191,15 +191,22 @@ if bashio::config.equals 'mode' 'netserver' ;then
         
         # Special handling for powerman-pdu driver port specification
         if [[ "${upsdriver}" == "powerman-pdu" ]]; then
+            # Add maxstartdelay for powerman-pdu driver
+            bashio::log.info "Adding extended startup delay for powerman-pdu driver"
             # Remove powerman:// prefix if present and use just host:port
             if [[ "${upsport}" =~ ^powerman://(.+)$ ]]; then
                 upsport="${BASH_REMATCH[1]}"
                 bashio::log.info "Adjusted powerman-pdu port from powerman:// to: ${upsport}"
             fi
-            # If no port specified, default to localhost:10101
+            # If no port specified, default to 127.0.0.1:10101
             if [[ -z "${upsport}" ]] || [[ "${upsport}" == "auto" ]]; then
-                upsport="localhost:10101"
+                upsport="127.0.0.1:10101"
                 bashio::log.info "Using default powerman-pdu port: ${upsport}"
+            fi
+            # Replace localhost with 127.0.0.1 for better compatibility
+            if [[ "${upsport}" == "localhost:10101" ]]; then
+                upsport="127.0.0.1:10101"
+                bashio::log.info "Changed localhost to 127.0.0.1 for better compatibility"
             fi
         fi
         
@@ -208,6 +215,14 @@ if bashio::config.equals 'mode' 'netserver' ;then
             echo "[${upsname}]"
             echo "  driver = ${upsdriver}"
             echo "  port = ${upsport}"
+            # Add maxstartdelay for powerman-pdu driver specifically
+            if [[ "${upsdriver}" == "powerman-pdu" ]]; then
+                echo "  maxstartdelay = 90"
+                echo "  pollinterval = 5"
+                # Add username parameter for powerman-pdu - it needs this even though PowerMan handles auth
+                echo "  username = ${upsname}"
+                echo "  desc = \"PowerMan PDU ${upsname}\""
+            fi
         } >> /etc/nut/ups.conf
 
         OIFS=$IFS

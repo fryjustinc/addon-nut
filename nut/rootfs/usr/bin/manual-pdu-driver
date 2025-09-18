@@ -1,0 +1,69 @@
+#!/bin/bash
+# Manual PowerMan PDU driver start for debugging
+
+echo "=================================="
+echo "Manual PowerMan PDU Driver Start"
+echo "=================================="
+echo ""
+
+# Kill any existing driver
+echo "1. Stopping any existing powerman-pdu driver..."
+pkill -f powerman-pdu 2>/dev/null || true
+sleep 1
+
+# Check PowerMan status
+echo ""
+echo "2. Checking PowerMan status..."
+if ! nc -z localhost 10101 2>/dev/null; then
+    echo "✗ PowerMan not running on port 10101!"
+    echo "Please start PowerMan first"
+    exit 1
+fi
+echo "✓ PowerMan is running"
+
+# Create minimal ups.conf for testing
+echo ""
+echo "3. Creating test configuration..."
+cat > /tmp/test-ups.conf << EOF
+[rack_pdu]
+    driver = powerman-pdu
+    port = localhost:10101
+    username = rack_pdu
+    desc = "Test PowerMan PDU"
+    maxstartdelay = 90
+    pollinterval = 5
+EOF
+
+echo "Configuration:"
+cat /tmp/test-ups.conf
+
+# Find the driver
+echo ""
+echo "4. Locating powerman-pdu driver..."
+DRIVER_PATH=""
+for path in /lib/nut/powerman-pdu /usr/lib/nut/powerman-pdu /usr/lib/*/nut/powerman-pdu; do
+    if [ -x "$path" ]; then
+        DRIVER_PATH="$path"
+        echo "✓ Found driver at: $DRIVER_PATH"
+        break
+    fi
+done
+
+if [ -z "$DRIVER_PATH" ]; then
+    echo "✗ powerman-pdu driver not found!"
+    exit 1
+fi
+
+# Start the driver manually with debug
+echo ""
+echo "5. Starting driver manually with debug..."
+echo "Command: $DRIVER_PATH -a rack_pdu -DD"
+echo ""
+
+# Run with timeout to prevent hanging
+timeout 30 $DRIVER_PATH -a rack_pdu -DD 2>&1 | tee /tmp/powerman-pdu.log
+
+echo ""
+echo "=================================="
+echo "Driver output saved to /tmp/powerman-pdu.log"
+echo "=================================="

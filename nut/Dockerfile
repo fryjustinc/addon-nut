@@ -30,7 +30,11 @@ COPY rootfs /
 
 # Create symlinks for powerman-pdu driver if needed
 # The driver can be in various locations depending on the distribution
-RUN mkdir -p /usr/lib/nut \
+RUN echo "Checking for NUT powerman-pdu driver..." \
+    && dpkg -L nut-powerman-pdu 2>/dev/null || echo "nut-powerman-pdu package contents not found" \
+    && echo "Looking for powerman-pdu binary..." \
+    && find / -name "powerman-pdu" -type f 2>/dev/null | head -10 || echo "No powerman-pdu found" \
+    && mkdir -p /usr/lib/nut \
     && for src in /lib/nut/powerman-pdu /usr/lib/*/nut/powerman-pdu /usr/lib/nut-2.8.1/powerman-pdu; do \
         if [ -f "$src" ] && [ ! -e /usr/lib/nut/powerman-pdu ]; then \
             echo "Found powerman-pdu driver at $src, creating symlink..." \
@@ -47,6 +51,8 @@ RUN mkdir -p /usr/lib/nut \
 
 # Make scripts executable and fix permissions
 RUN chmod +x /usr/bin/notify \
+    && chmod +x /usr/bin/test-powerman-direct 2>/dev/null || true \
+    && chmod +x /usr/bin/manual-pdu-driver 2>/dev/null || true \
     && chmod +x /usr/bin/shutdownhost \
     && chmod +x /usr/bin/test-powerman 2>/dev/null || true \
     && chmod +x /usr/bin/test-powerman-status 2>/dev/null || true \
