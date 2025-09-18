@@ -58,7 +58,7 @@ listen "0.0.0.0:10101"
 # Include device specifications
 include "/etc/powerman/devices/apcpdu3.dev"
 include "/etc/powerman/devices/apcpdu.dev"
-include "/etc/powerman/devices/apc-simple.dev"
+# Disabled due to parse errors: include "/etc/powerman/devices/apc-simple.dev"
 
 EOF
 
@@ -97,9 +97,9 @@ if bashio::config.has_value 'powerman_pdu_name' && \
             echo "device \"${pdu_name}\" \"apcpdu3\" \"|${TELNET_CMD} ${pdu_host} 23 |&\"" >> /etc/powerman/powerman.conf
             ;;
         "apc-simple")
-            # Simplified APC PDU driver
-            bashio::log.info "Configuring simplified APC PDU via telnet"
-            echo "device \"${pdu_name}\" \"apc-simple\" \"|${TELNET_CMD} ${pdu_host} 23 |&\"" >> /etc/powerman/powerman.conf
+            # Use apcpdu3 instead of the broken apc-simple
+            bashio::log.info "Configuring APC PDU via telnet (using apcpdu3 driver)"
+            echo "device \"${pdu_name}\" \"apcpdu3\" \"|${TELNET_CMD} ${pdu_host} 23 |&\"" >> /etc/powerman/powerman.conf
             ;;
         "ipmipower")
             # IPMI-based PDUs
