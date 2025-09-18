@@ -47,8 +47,8 @@ bashio::log.info "Starting PowerMan daemon (supervised)..."
 # Make sure the run directory exists
 mkdir -p /var/run/powerman
 
-# Run powermand in foreground mode (required for s6 supervision)
-# The -F flag keeps it in foreground, -D adds debug output
+# PowerMan doesn't have a foreground mode flag, so we need to run it differently
+# We'll run it in debug mode which keeps it in foreground
 bashio::log.info "Starting PowerMan with config: /etc/powerman/powerman.conf"
 
 # Show configuration for debugging
@@ -57,9 +57,6 @@ if bashio::debug; then
     cat /etc/powerman/powerman.conf
 fi
 
-# Run with debug output if in debug mode
-if bashio::debug; then
-    exec /usr/sbin/powermand -F -D -c /etc/powerman/powerman.conf
-else
-    exec /usr/sbin/powermand -F -c /etc/powerman/powerman.conf
-fi
+# Run in debug mode (stays in foreground) with stderr redirected to stdout
+# The -d flag with debug level keeps it in foreground
+exec /usr/sbin/powermand -d -c /etc/powerman/powerman.conf 2>&1
