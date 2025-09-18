@@ -1,10 +1,10 @@
 #!/command/with-contenv bashio
 # ==============================================================================
 # Home Assistant Community Add-on: Network UPS Tools
-# PowerMan daemon finish script
+# Take down the S6 supervision tree when powerman fails
 # ==============================================================================
 if [[ "${1}" -ne 0 ]] && [[ "${1}" -ne 256 ]]; then
-  bashio::log.warning "PowerMan daemon crashed"
+  bashio::log.warning "powerman crashed, restarting..."
 fi
 
-bashio::log.info "PowerMan daemon stopped"
+bashio::log.info "powerman stopped, will restart if needed..."

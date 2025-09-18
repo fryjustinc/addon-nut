@@ -223,17 +223,8 @@ else
     exit 1
 fi
 
-# START POWERMAN DAEMON NOW!
-bashio::log.info "Starting PowerMan daemon..."
-
-# Kill any existing powermand process
-if command -v pkill &>/dev/null; then
-    pkill powermand 2>/dev/null || true
-else
-    # Fallback if pkill is not available
-    killall powermand 2>/dev/null || true
-fi
-sleep 1
+# PowerMan will be started by s6 service manager
+bashio::log.info "PowerMan configuration complete. Service will be started by s6..."
 
 # Check if powermand binary exists
 if ! command -v powermand &>/dev/null; then
@@ -247,69 +238,9 @@ fi
 touch /var/log/powerman.log
 chmod 644 /var/log/powerman.log
 
-# Start powermand in foreground mode (daemon mode) with debug output for troubleshooting
-bashio::log.info "Starting: /usr/sbin/powermand -d -c /etc/powerman/powerman.conf"
-/usr/sbin/powermand -d -c /etc/powerman/powerman.conf > /var/log/powerman.log 2>&1 &
-POWERMAN_PID=$!
+# Create a flag file to indicate PowerMan should be started
+touch /var/run/powerman.configured
 
-bashio::log.info "PowerMan daemon started with PID: ${POWERMAN_PID}"
+bashio::log.info "PowerMan configuration ready, service will start shortly..."
 
-# Wait for PowerMan to be ready
-bashio::log.info "Waiting for PowerMan to be ready on port 10101..."
-for i in {1..30}; do
-    # Try multiple methods to check if port is open
-    port_open=false
-    
-    # Method 1: Use nc if available
-    if command -v nc &>/dev/null; then
-        if nc -z localhost 10101 2>/dev/null; then
-            port_open=true
-        fi
-    # Method 2: Use telnet if available
-    elif command -v telnet &>/dev/null; then
-        if timeout 1 telnet localhost 10101 2>&1 | grep -q "Connected"; then
-            port_open=true
-        fi
-    # Method 3: Use bash tcp redirect
-    else
-        if timeout 1 bash -c "echo > /dev/tcp/localhost/10101" 2>/dev/null; then
-            port_open=true
-        fi
-    fi
-    
-    if [[ "${port_open}" == "true" ]]; then
-        bashio::log.info "PowerMan is ready and listening on port 10101"
-        
-        # Test connection
-        if echo "quit" | nc localhost 10101 2>&1 | grep -q "powerman"; then
-            bashio::log.info "PowerMan is responding correctly"
-        fi
-        
-        # Create a flag file to indicate PowerMan is running
-        touch /var/run/powerman.ready
-        
-        exit 0
-    fi
-    bashio::log.debug "Waiting for PowerMan... ($i/30)"
-    sleep 1
-done
-
-# If we get here, PowerMan failed to start
-bashio::log.error "PowerMan failed to start within 30 seconds!"
-bashio::log.error "PowerMan log:"
-if [ -f /var/log/powerman.log ]; then
-    cat /var/log/powerman.log | while IFS= read -r line; do
-        bashio::log.error "  Log: ${line}"
-    done
-else
-    bashio::log.error "No log file found"
-fi
-
-# Check if the process is still running
-if kill -0 ${POWERMAN_PID} 2>/dev/null; then
-    bashio::log.warning "PowerMan process is running but not responding on port 10101"
-else
-    bashio::log.error "PowerMan process died!"
-fi
-
-exit 1
+exit 0

@@ -46,26 +46,73 @@ done
 
 # Wait for PowerMan service if needed
 if [[ "${has_powerman}" == "true" ]]; then
-    bashio::log.info "Checking if PowerMan is ready..."
-    if [ -f /var/run/powerman.ready ]; then
-        bashio::log.info "PowerMan is ready (flag file found)"
-    else
-        bashio::log.info "Waiting for PowerMan service to be ready..."
-        for i in {1..10}; do
-            if [ -f /var/run/powerman.ready ] || nc -z localhost 10101 2>/dev/null; then
-                bashio::log.info "PowerMan is ready on port 10101"
-                break
+    bashio::log.info "Waiting for PowerMan service to be ready..."
+    powerman_ready=false
+    
+    # Wait for PowerMan to be configured first
+    for i in {1..10}; do
+        if [ -f /var/run/powerman.configured ]; then
+            bashio::log.info "PowerMan configuration found"
+            break
+        fi
+        bashio::log.debug "Waiting for PowerMan configuration... ($i/10)"
+        sleep 1
+    done
+    
+    # Now wait for PowerMan service to actually be listening
+    bashio::log.info "Waiting for PowerMan service to start listening on port 10101..."
+    for i in {1..30}; do
+        # Check if PowerMan is listening
+        if nc -z localhost 10101 2>/dev/null || nc -z 127.0.0.1 10101 2>/dev/null; then
+            bashio::log.info "PowerMan is listening on port 10101"
+            powerman_ready=true
+            
+            # Test actual connectivity with powerman client
+            if command -v pm &>/dev/null; then
+                if timeout 2 pm -h localhost -l 2>&1 | grep -qE "(rack_pdu|[1-8])"; then
+                    bashio::log.info "PowerMan connectivity verified with pm client"
+                else
+                    bashio::log.warning "PowerMan is listening but pm client test failed"
+                fi
             fi
-            if [[ $i -eq 10 ]]; then
-                bashio::log.error "PowerMan service not responding!"
-                bashio::log.info "Checking PowerMan process..."
-                ps aux | grep powermand | grep -v grep || bashio::log.error "PowerMan process not found!"
-                bashio::log.info "PowerMan log:"
-                tail -20 /var/log/powerman.log 2>/dev/null || bashio::log.error "No log file"
+            
+            # Also test with a simple echo command
+            if echo "help" | nc -w 1 localhost 10101 2>/dev/null | grep -q "powerman"; then
+                bashio::log.info "PowerMan is responding to commands"
+            fi
+            
+            # Mark as ready
+            touch /var/run/powerman.ready
+            break
+        fi
+        
+        if [[ $i -eq 30 ]]; then
+            bashio::log.error "PowerMan service not responding after 30 seconds!"
+            bashio::log.info "Checking PowerMan process..."
+            ps aux | grep powermand | grep -v grep || bashio::log.error "PowerMan process not found!"
+            
+            bashio::log.info "Checking s6 service status..."
+            s6-svstat /var/run/s6/services/powerman 2>&1 || true
+            
+            bashio::log.info "PowerMan log (last 50 lines):"
+            if [ -f /var/log/powerman.log ]; then
+                tail -50 /var/log/powerman.log
             else
-                sleep 1
+                bashio::log.error "No PowerMan log file found"
             fi
-        done
+            
+            bashio::log.info "Checking if port 10101 is in use:"
+            netstat -tuln 2>/dev/null | grep 10101 || bashio::log.error "Port 10101 not listening (netstat)"
+            ss -tuln 2>/dev/null | grep 10101 || bashio::log.error "Port 10101 not listening (ss)"
+        else
+            bashio::log.debug "Waiting for PowerMan... ($i/30)"
+            sleep 1
+        fi
+    done
+    
+    if [[ "${powerman_ready}" != "true" ]]; then
+        bashio::log.error "PowerMan is not ready, powerman-pdu driver may fail"
+        bashio::log.info "Attempting to start drivers anyway..."
     fi
 fi
 
@@ -87,7 +134,10 @@ if bashio::config.equals 'mode' 'netserver' ;then
 
         bashio::log.info "Configuring user: ${username}"
         if ! bashio::config.true 'i_like_to_be_pwned'; then
-            bashio::config.require.safe_password "users[${user}].password"
+            # Try to check password safety, but continue if check fails
+            if ! bashio::config.require.safe_password "users[${user}].password" 2>/dev/null; then
+                bashio::log.warning "Password safety check had issues, continuing..."
+            fi
         else
             bashio::config.require.password "users[${user}].password"
         fi
@@ -129,6 +179,21 @@ if bashio::config.equals 'mode' 'netserver' ;then
         fi
 
         bashio::log.info "Configuring Device named ${upsname}..."
+        
+        # Special handling for powerman-pdu driver port specification
+        if [[ "${upsdriver}" == "powerman-pdu" ]]; then
+            # Remove powerman:// prefix if present and use just host:port
+            if [[ "${upsport}" =~ ^powerman://(.+)$ ]]; then
+                upsport="${BASH_REMATCH[1]}"
+                bashio::log.info "Adjusted powerman-pdu port from powerman:// to: ${upsport}"
+            fi
+            # If no port specified, default to localhost:10101
+            if [[ -z "${upsport}" ]] || [[ "${upsport}" == "auto" ]]; then
+                upsport="localhost:10101"
+                bashio::log.info "Using default powerman-pdu port: ${upsport}"
+            fi
+        fi
+        
         {
             echo
             echo "[${upsname}]"

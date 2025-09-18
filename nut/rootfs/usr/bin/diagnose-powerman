@@ -1,0 +1,109 @@
+#!/bin/bash
+# Quick diagnostic for PowerMan-PDU integration
+
+echo "=== PowerMan-PDU Integration Diagnostic ==="
+echo "Date: $(date)"
+echo ""
+
+echo "1. PowerMan Service Status:"
+echo "--------------------------"
+if pgrep powermand >/dev/null; then
+    echo "✓ PowerMan daemon is running (PID: $(pgrep powermand))"
+    ps aux | grep "[p]owermand"
+else
+    echo "✗ PowerMan daemon is NOT running"
+fi
+echo ""
+
+echo "2. Network Connectivity:"
+echo "------------------------"
+echo "Checking localhost resolution:"
+ping -c 1 localhost 2>&1 | head -2
+getent hosts localhost
+
+echo ""
+echo "Checking 127.0.0.1:"
+ping -c 1 127.0.0.1 2>&1 | head -2
+
+echo ""
+echo "Port 10101 status:"
+if nc -z localhost 10101 2>/dev/null; then
+    echo "✓ Port 10101 is open on localhost"
+else
+    echo "✗ Port 10101 is NOT open on localhost"
+fi
+
+if nc -z 127.0.0.1 10101 2>/dev/null; then
+    echo "✓ Port 10101 is open on 127.0.0.1"
+else
+    echo "✗ Port 10101 is NOT open on 127.0.0.1"
+fi
+
+echo ""
+echo "Netstat output:"
+netstat -tuln 2>/dev/null | grep -E "(Active|Proto|10101)" || echo "netstat not available or port not found"
+
+echo ""
+echo "SS output:"
+ss -tuln 2>/dev/null | grep -E "(State|10101)" || echo "ss not available or port not found"
+
+echo ""
+echo "3. PowerMan Configuration:"
+echo "--------------------------"
+if [ -f /etc/powerman/powerman.conf ]; then
+    echo "Configuration file exists. Content:"
+    cat /etc/powerman/powerman.conf | grep -v "^#" | grep -v "^$"
+else
+    echo "✗ Configuration file not found!"
+fi
+
+echo ""
+echo "4. NUT Configuration (powerman-pdu devices):"
+echo "--------------------------------------------"
+if [ -f /etc/nut/ups.conf ]; then
+    echo "UPS.conf powerman-pdu entries:"
+    grep -A 5 "driver.*powerman-pdu" /etc/nut/ups.conf || echo "No powerman-pdu devices found"
+else
+    echo "✗ ups.conf not found!"
+fi
+
+echo ""
+echo "5. Testing PowerMan Connection:"
+echo "--------------------------------"
+echo "Attempting to connect with nc:"
+echo "help" | timeout 2 nc localhost 10101 2>&1 | head -10 || echo "Failed to connect with nc"
+
+echo ""
+echo "Attempting to connect with telnet:"
+echo "help" | timeout 2 telnet localhost 10101 2>&1 | head -10 || echo "Failed to connect with telnet"
+
+echo ""
+echo "6. Testing powerman-pdu Driver:"
+echo "--------------------------------"
+DRIVER=$(find /lib/nut /usr/lib/nut -name powerman-pdu 2>/dev/null | head -1)
+if [ -n "$DRIVER" ]; then
+    echo "Driver found at: $DRIVER"
+    echo ""
+    echo "Testing with localhost:10101:"
+    timeout 3 "$DRIVER" -a test_pdu -x port=localhost:10101 -DDD 2>&1 | grep -E "(Network UPS Tools|driver|connect|power|error|failed)" | head -20
+    echo ""
+    echo "Testing with 127.0.0.1:10101:"
+    timeout 3 "$DRIVER" -a test_pdu -x port=127.0.0.1:10101 -DDD 2>&1 | grep -E "(Network UPS Tools|driver|connect|power|error|failed)" | head -20
+else
+    echo "✗ powerman-pdu driver not found!"
+fi
+
+echo ""
+echo "7. Recent Log Messages:"
+echo "-----------------------"
+echo "PowerMan log (last 20 lines):"
+tail -20 /var/log/powerman.log 2>/dev/null || echo "No PowerMan log found"
+
+echo ""
+echo "System log messages related to PowerMan/NUT:"
+journalctl -u powerman -n 20 --no-pager 2>/dev/null || \
+    dmesg | grep -iE "(powerman|nut|ups)" | tail -20 || \
+    echo "No relevant system logs found"
+
+echo ""
+echo "=== End Diagnostic ==="

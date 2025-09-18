@@ -1,0 +1,81 @@
+#!/bin/bash
+# Test PowerMan connection and formats
+
+echo "Testing PowerMan connectivity..."
+
+# Test if PowerMan is running
+if ps aux | grep -q "[p]owermand"; then
+    echo "✓ PowerMan daemon is running"
+else
+    echo "✗ PowerMan daemon is NOT running"
+fi
+
+# Test port connectivity
+if nc -z localhost 10101 2>/dev/null; then
+    echo "✓ Port 10101 is open on localhost"
+else
+    echo "✗ Port 10101 is NOT open on localhost"
+fi
+
+if nc -z 127.0.0.1 10101 2>/dev/null; then
+    echo "✓ Port 10101 is open on 127.0.0.1"
+else
+    echo "✗ Port 10101 is NOT open on 127.0.0.1"
+fi
+
+# Test PowerMan client
+if command -v pm &>/dev/null; then
+    echo "Testing PowerMan client (pm)..."
+    echo "  Trying: pm -h localhost -l"
+    timeout 2 pm -h localhost -l 2>&1 | head -10
+    
+    echo "  Trying: pm -h 127.0.0.1 -l"
+    timeout 2 pm -h 127.0.0.1 -l 2>&1 | head -10
+else
+    echo "✗ PowerMan client (pm) not found"
+fi
+
+# Test powerman-pdu driver with different port formats
+echo ""
+echo "Testing powerman-pdu driver with different port formats..."
+
+if [ -f /lib/nut/powerman-pdu ] || [ -f /usr/lib/nut/powerman-pdu ]; then
+    DRIVER_PATH=$(find /lib/nut /usr/lib/nut -name "powerman-pdu" 2>/dev/null | head -1)
+    echo "Found driver at: $DRIVER_PATH"
+    
+    echo ""
+    echo "Test 1: port = localhost:10101"
+    timeout 3 $DRIVER_PATH -a test1 -x port=localhost:10101 -DD 2>&1 | head -20
+    
+    echo ""
+    echo "Test 2: port = 127.0.0.1:10101"
+    timeout 3 $DRIVER_PATH -a test2 -x port=127.0.0.1:10101 -DD 2>&1 | head -20
+    
+    echo ""
+    echo "Test 3: port = localhost (default port)"
+    timeout 3 $DRIVER_PATH -a test3 -x port=localhost -DD 2>&1 | head -20
+    
+    echo ""
+    echo "Test 4: port = powerman://localhost:10101"
+    timeout 3 $DRIVER_PATH -a test4 -x port=powerman://localhost:10101 -DD 2>&1 | head -20
+else
+    echo "✗ powerman-pdu driver not found"
+fi
+
+echo ""
+echo "Checking PowerMan configuration..."
+if [ -f /etc/powerman/powerman.conf ]; then
+    echo "PowerMan configuration:"
+    cat /etc/powerman/powerman.conf
+else
+    echo "✗ PowerMan configuration not found"
+fi
+
+echo ""
+echo "Checking PowerMan log..."
+if [ -f /var/log/powerman.log ]; then
+    echo "Last 20 lines of PowerMan log:"
+    tail -20 /var/log/powerman.log
+else
+    echo "✗ PowerMan log not found"
+fi

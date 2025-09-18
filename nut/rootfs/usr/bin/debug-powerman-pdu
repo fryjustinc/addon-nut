@@ -1,0 +1,95 @@
+#!/bin/bash
+# Debug PowerMan PDU driver issues
+
+echo "=== PowerMan-PDU Driver Debug ==="
+echo ""
+
+# Find the driver
+DRIVER_PATH=""
+for path in /lib/nut/powerman-pdu /usr/lib/nut/powerman-pdu /usr/lib/*/nut/powerman-pdu; do
+    if [ -f "$path" ]; then
+        DRIVER_PATH="$path"
+        break
+    fi
+done
+
+if [ -z "$DRIVER_PATH" ]; then
+    echo "ERROR: powerman-pdu driver not found!"
+    echo "Searching for it..."
+    find / -name "powerman-pdu" 2>/dev/null
+    exit 1
+fi
+
+echo "Found powerman-pdu driver at: $DRIVER_PATH"
+echo ""
+
+# Check if it's executable
+if [ -x "$DRIVER_PATH" ]; then
+    echo "✓ Driver is executable"
+else
+    echo "✗ Driver is NOT executable"
+    ls -la "$DRIVER_PATH"
+fi
+
+echo ""
+echo "Driver dependencies:"
+ldd "$DRIVER_PATH" 2>&1 | head -20
+
+echo ""
+echo "Testing driver help output:"
+"$DRIVER_PATH" -h 2>&1 | head -30
+
+echo ""
+echo "Testing driver with various port configurations:"
+echo "----------------------------------------"
+
+# Test different port formats
+test_configs=(
+    "localhost:10101"
+    "127.0.0.1:10101"
+    "localhost"
+    "127.0.0.1"
+    "tcp:localhost:10101"
+    "tcp:127.0.0.1:10101"
+)
+
+for config in "${test_configs[@]}"; do
+    echo ""
+    echo "Testing with port=$config"
+    echo "Command: $DRIVER_PATH -a test_pdu -x port=$config -DDD"
+    timeout 2 "$DRIVER_PATH" -a test_pdu -x port="$config" -DDD 2>&1 | grep -E "(connect|address|powerman|error|failed)" | head -10
+done
+
+echo ""
+echo "=== Current NUT Configuration ==="
+if [ -f /etc/nut/ups.conf ]; then
+    echo "ups.conf powerman-pdu entries:"
+    awk '/^\[.*\]/{name=$0} /driver.*powerman-pdu/{print name; getline; print; getline; print}' /etc/nut/ups.conf
+else
+    echo "ups.conf not found"
+fi
+
+echo ""
+echo "=== PowerMan Status ==="
+if ps aux | grep -q "[p]owermand"; then
+    echo "✓ PowerMan daemon is running:"
+    ps aux | grep "[p]owermand"
+else
+    echo "✗ PowerMan daemon is NOT running"
+fi
+
+echo ""
+echo "Port 10101 status:"
+netstat -tuln 2>/dev/null | grep 10101 || echo "Port 10101 not found in netstat"
+ss -tuln 2>/dev/null | grep 10101 || echo "Port 10101 not found in ss"
+
+echo ""
+echo "Testing PowerMan connectivity with nc:"
+if echo "help" | nc -w 1 localhost 10101 2>/dev/null | head -5; then
+    echo "✓ PowerMan is responding on localhost:10101"
+else
+    echo "✗ PowerMan is NOT responding on localhost:10101"
+fi
+
+echo ""
+echo "=== End Debug ==="

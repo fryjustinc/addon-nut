@@ -19,6 +19,9 @@ RUN \
         netcat-openbsd \
         snmp \
         procps \
+        net-tools \
+        inetutils-ping \
+        iproute2 \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
@@ -47,12 +50,14 @@ RUN chmod +x /usr/bin/notify \
     && chmod +x /usr/bin/shutdownhost \
     && chmod +x /usr/bin/test-powerman 2>/dev/null || true \
     && chmod +x /usr/bin/test-powerman-pdu 2>/dev/null || true \
+    && chmod +x /usr/bin/test-powerman-connection 2>/dev/null || true \
+    && chmod +x /usr/bin/debug-powerman-pdu 2>/dev/null || true \
+    && chmod +x /usr/bin/diagnose-powerman 2>/dev/null || true \
     && chmod +x /usr/bin/test-apc-ap7900b 2>/dev/null || true \
     && chmod +x /usr/bin/test-snmp-ups 2>/dev/null || true \
     && chmod +x /usr/bin/cleanup-old-files 2>/dev/null || true \
     && chmod +x /usr/bin/validate-powerman-config 2>/dev/null || true \
-    && chmod +x /etc/services.d/*/run \
-    && chmod +x /etc/services.d/*/finish \
+    && find /etc/services.d -name run -o -name finish | xargs chmod +x \
     && chmod +x /etc/cont-init.d/*.sh \
     && rm -f /etc/cont-init.d/powerman.sh.old 2>/dev/null || true \
     && mkdir -p /var/run/nut \

@@ -1,24 +1,18 @@
 #!/command/with-contenv bashio
 # ==============================================================================
 # Home Assistant Community Add-on: Network UPS Tools
-# Monitor PowerMan daemon for PDU support
+# Run PowerMan daemon if needed
 # ==============================================================================
 
-# Only run in netserver mode
-if ! bashio::config.equals 'mode' 'netserver' ;then
-    bashio::log.debug "Not in netserver mode, PowerMan monitor not needed"
-    exec sleep 864000
-fi
-
-# Check if PowerMan should be running
+# Check if we need PowerMan
 has_powerman=false
 
-# Check explicit enable flag
+# Check the explicit powerman_enabled flag
 if bashio::config.has_value 'powerman_enabled' && bashio::config.true 'powerman_enabled' ;then
     has_powerman=true
 fi
 
-# Check for powerman-pdu devices
+# Also check if any device uses the powerman-pdu driver
 for device in $(bashio::config "devices|keys"); do
     driver=$(bashio::config "devices[${device}].driver")
     if [[ "${driver}" == "powerman-pdu" ]]; then
@@ -28,30 +22,44 @@ for device in $(bashio::config "devices|keys"); do
 done
 
 if [[ "${has_powerman}" == "false" ]]; then
-    bashio::log.debug "No PowerMan PDU devices configured, PowerMan monitor not needed"
+    bashio::log.info "PowerMan not needed, sleeping..."
     exec sleep 864000
 fi
 
-# PowerMan should already be started by 00-powerman.sh init script
-# This service just monitors it and restarts if needed
-
-bashio::log.info "Monitoring PowerMan daemon..."
-
-# Check if PowerMan is already running
-if pgrep powermand > /dev/null; then
-    bashio::log.info "PowerMan daemon already running, monitoring..."
-    # Just sleep and let s6 restart us if powerman dies
-    exec sleep 864000
-fi
-
-# If we get here, PowerMan isn't running but should be
-bashio::log.warning "PowerMan daemon not found, attempting to start..."
-
-# Check if configuration exists
+# Wait for configuration to be ready
 if [ ! -f /etc/powerman/powerman.conf ]; then
-    bashio::log.error "PowerMan configuration file not found!"
+    bashio::log.info "Waiting for PowerMan configuration..."
+    for i in {1..30}; do
+        if [ -f /etc/powerman/powerman.conf ]; then
+            break
+        fi
+        sleep 1
+    done
+fi
+
+if [ ! -f /etc/powerman/powerman.conf ]; then
+    bashio::log.error "PowerMan configuration not found after 30 seconds!"
     exec sleep 864000
 fi
 
-# Try to start PowerMan
-exec /usr/sbin/powermand -f -c /etc/powerman/powerman.conf
+bashio::log.info "Starting PowerMan daemon (supervised)..."
+
+# Make sure the run directory exists
+mkdir -p /var/run/powerman
+
+# Run powermand in foreground mode (required for s6 supervision)
+# The -F flag keeps it in foreground, -D adds debug output
+bashio::log.info "Starting PowerMan with config: /etc/powerman/powerman.conf"
+
+# Show configuration for debugging
+if bashio::debug; then
+    bashio::log.debug "PowerMan configuration:"
+    cat /etc/powerman/powerman.conf
+fi
+
+# Run with debug output if in debug mode
+if bashio::debug; then
+    exec /usr/sbin/powermand -F -D -c /etc/powerman/powerman.conf
+else
+    exec /usr/sbin/powermand -F -c /etc/powerman/powerman.conf
+fi
