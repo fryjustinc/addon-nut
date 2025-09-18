@@ -1,0 +1,5 @@
+#!/bin/bash
+# PowerMan driver wrapper for NUT
+# This uses dummy-ups to provide PowerMan PDU data to NUT
+
+exec /usr/lib/nut/dummy-ups "$@"

@@ -1,0 +1,74 @@
+# Home Assistant NUT Addon - Working Configuration
+# For APC SMT2200RM2UC UPS (with NMC2) and AP7900B PDU
+#
+# IMPORTANT: The driver for PowerMan PDUs is "powerman-pdu" not "powerman"
+
+users:
+  - username: homeassistant
+    password: coolie  # CHANGE THIS IN PRODUCTION!
+    instcmds:
+      - all
+    actions:
+      - set
+      - fsd
+    upsmon: master
+
+devices:
+  # APC Smart-UPS with NMC2 (SNMP)
+  - name: smart_ups
+    driver: snmp-ups
+    port: 192.168.51.124  # Your NMC2 IP address
+    config:
+      - community = "private"  # Your SNMP community string
+      - snmp_version = "v1"
+      - pollfreq = 15
+      - desc = "Rack UPS - Primary Power"
+  
+  # APC AP7900B PDU (via PowerMan)
+  - name: rack_pdu
+    driver: powerman-pdu  # Note: driver is "powerman-pdu" not "powerman"
+    port: "powerman://localhost:10101"
+    config: []
+    powerman_device: "apc_pdu"
+
+# PowerMan configuration for the PDU
+powerman:
+  enabled: true
+  devices:
+    - name: apc_pdu
+      type: apc
+      host: 192.168.51.27  # Your PDU IP address
+      username: apc        # Your PDU username
+      password: apc        # Your PDU password - CHANGE THIS!
+      nodes: "outlet[1-8]" # Note: This must be quoted
+
+mode: netserver
+shutdown_host: "false"
+
+# Optional debugging
+# log_level: debug
+
+# ===============================================
+# NOTES ABOUT THIS CONFIGURATION
+# ===============================================
+# 
+# 1. The SNMP UPS should be working if:
+#    - The NMC2 has SNMP enabled
+#    - The community string matches
+#    - Network connectivity exists
+#
+# 2. The PDU support requires:
+#    - PowerMan daemon to be running
+#    - Telnet enabled on the PDU
+#    - Correct IP and credentials
+#
+# 3. Common issues:
+#    - Make sure to use "powerman-pdu" not "powerman" as the driver
+#    - The nodes parameter must be quoted: "outlet[1-8]"
+#    - Check firewall rules for SNMP (161/UDP) and Telnet (23/TCP)
+#
+# 4. Testing:
+#    - Check addon logs: ha addon logs a0d7b954-nut
+#    - Test SNMP: /usr/bin/test-snmp-ups
+#    - Test PDU: /usr/bin/test-apc-ap7900b
+#    - Query status: upsc -l

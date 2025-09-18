@@ -23,7 +23,7 @@ RUN \
 # Copy root filesystem
 COPY rootfs /
 
-# Make scripts executable
+# Make scripts executable and fix permissions
 RUN chmod +x /usr/bin/notify \
     && chmod +x /usr/bin/shutdownhost \
     && chmod +x /usr/bin/test-powerman \
@@ -31,7 +31,9 @@ RUN chmod +x /usr/bin/notify \
     && chmod +x /usr/bin/test-snmp-ups \
     && chmod +x /etc/services.d/*/run \
     && chmod +x /etc/services.d/*/finish \
-    && chmod +x /etc/cont-init.d/*.sh
+    && chmod +x /etc/cont-init.d/*.sh \
+    && mkdir -p /var/run/nut \
+    && chmod 0770 /var/run/nut
 
 # Build arguments
 ARG BUILD_ARCH

@@ -77,10 +77,10 @@ for pdu in $(bashio::config "powerman.devices|keys"); do
         fi
         
         # Check NUT configuration
-        bashio::log.info ""
-        bashio::log.info "Checking NUT configuration..."
-        for device in $(bashio::config "devices|keys"); do
-            if bashio::config.equals "devices[${device}].driver" "powerman"; then
+bashio::log.info ""
+bashio::log.info "Checking NUT configuration..."
+for device in $(bashio::config "devices|keys"); do
+        if bashio::config.equals "devices[${device}].driver" "powerman-pdu"; then
                 upsname=$(bashio::config "devices[${device}].name")
                 pmdevice=$(bashio::config "devices[${device}].powerman_device" || echo "")
                 

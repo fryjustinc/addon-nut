@@ -101,8 +101,8 @@ if bashio::config.equals 'mode' 'netserver' ;then
         done
         IFS="$OIFS"
         
-        # Add PowerMan-specific configuration if using powerman driver
-        if bashio::config.equals "devices[${device}].driver" "powerman"; then
+        # Add PowerMan-specific configuration if using powerman-pdu driver
+        if bashio::config.equals "devices[${device}].driver" "powerman-pdu"; then
             # Set default PowerMan connection if port not specified or is 'auto'
             if ! bashio::config.has_value "devices[${device}].port" || bashio::config.equals "devices[${device}].port" "auto"; then
                 sed -i "s|port = auto|port = powerman://localhost:10101|g" /etc/nut/ups.conf

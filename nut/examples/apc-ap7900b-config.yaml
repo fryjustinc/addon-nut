@@ -35,7 +35,7 @@ devices:
   
   # APC AP7900B PDU configuration
   - name: apc_pdu
-    driver: powerman
+    driver: powerman-pdu
     port: "powerman://localhost:10101"
     config: []
     powerman_device: "ap7900b"

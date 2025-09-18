@@ -410,7 +410,7 @@ Example configuration:
 ```yaml
 devices:
   - name: mypdu
-    driver: powerman
+    driver: powerman-pdu
     port: "powerman://localhost:10101"
     config: []
     powerman_device: "pdu1"

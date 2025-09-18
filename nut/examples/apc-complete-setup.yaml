@@ -53,7 +53,7 @@ devices:
   # APC AP7900B PDU (via PowerMan)
   # ---------------------------------------------
   - name: apc_pdu
-    driver: powerman
+    driver: powerman-pdu
     port: "powerman://localhost:10101"
     config: []
     powerman_device: "rack_pdu"
