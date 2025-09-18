@@ -131,11 +131,16 @@ if bashio::config.has_value 'powerman_pdu_name' && \
 fi
 
 # Parse devices for inline powerman configuration
+first_pdu_name=""
 for device in $(bashio::config "devices|keys"); do
     driver=$(bashio::config "devices[${device}].driver")
     
     if [[ "${driver}" == "powerman-pdu" ]]; then
         name=$(bashio::config "devices[${device}].name")
+        # remember first encountered PDU name for fallback
+        if [[ -z "${first_pdu_name}" ]]; then
+            first_pdu_name="${name}"
+        fi
         port=$(bashio::config "devices[${device}].port")
         
         # Skip if already configured explicitly
@@ -186,13 +191,53 @@ for device in $(bashio::config "devices|keys"); do
             echo "node \"[1-8]\" \"${name}\"" >> /etc/powerman/powerman.conf
         else
             bashio::log.warning "PDU device ${name} missing connection info"
-            # Try a default configuration for testing with telnet for APC AP7900B
-            bashio::log.info "Attempting default telnet configuration for ${name}"
-            echo "device \"${name}\" \"apcpdu3\" \"|${TELNET_CMD} 192.168.51.124 23 |&\"" >> /etc/powerman/powerman.conf
-            echo "node \"[1-8]\" \"${name}\"" >> /etc/powerman/powerman.conf
+            # Try to use top-level powerman_pdu_host if available
+            if bashio::config.has_value 'powerman_pdu_host'; then
+                fallback_host=$(bashio::config 'powerman_pdu_host')
+                bashio::log.info "Using configured powerman_pdu_host ${fallback_host} for ${name}"
+                echo "device \"${name}\" \"apcpdu3\" \"|${TELNET_CMD} ${fallback_host} 23 |&\"" >> /etc/powerman/powerman.conf
+                echo "node \"[1-8]\" \"${name}\"" >> /etc/powerman/powerman.conf
+            else
+                # As a last resort, scan for an SNMP device to reuse its host
+                snmp_host=""
+                for dev2 in $(bashio::config "devices|keys"); do
+                    d2=$(bashio::config "devices[${dev2}].driver")
+                    if [[ "${d2}" == "snmp-ups" ]]; then
+                        host2=$(bashio::config "devices[${dev2}].port")
+                        if [[ -n "${host2}" && "${host2}" != "auto" ]]; then
+                            snmp_host="${host2}"
+                            break
+                        fi
+                    fi
+                done
+                if [[ -n "${snmp_host}" ]]; then
+                    bashio::log.info "Using SNMP device host ${snmp_host} for ${name}"
+                    echo "device \"${name}\" \"apcpdu3\" \"|${TELNET_CMD} ${snmp_host} 23 |&\"" >> /etc/powerman/powerman.conf
+                    echo "node \"[1-8]\" \"${name}\"" >> /etc/powerman/powerman.conf
+                else
+                    # Final hardcoded fallback (best-effort)
+                    bashio::log.warning "Falling back to default host 192.168.51.124 for ${name}"
+                    echo "device \"${name}\" \"apcpdu3\" \"|${TELNET_CMD} 192.168.51.124 23 |&\"" >> /etc/powerman/powerman.conf
+                    echo "node \"[1-8]\" \"${name}\"" >> /etc/powerman/powerman.conf
+                fi
+            fi
         fi
     fi
 done
+
+# Ensure we defined at least one node; otherwise powermand will crash
+if ! grep -q '^node\s\"' /etc/powerman/powerman.conf 2>/dev/null; then
+    # Create a minimal default device and node using top-level host if present
+    def_name="${first_pdu_name:-rack_pdu}"
+    if bashio::config.has_value 'powerman_pdu_host'; then
+        def_host=$(bashio::config 'powerman_pdu_host')
+    else
+        def_host="192.168.51.124"
+    fi
+    bashio::log.warning "No nodes defined; adding default device '${def_name}' at ${def_host}"
+    echo "device \"${def_name}\" \"apcpdu3\" \"|${TELNET_CMD} ${def_host} 23 |&\"" >> /etc/powerman/powerman.conf
+    echo "node \"[1-8]\" \"${def_name}\"" >> /etc/powerman/powerman.conf
+fi
 
 # Make sure the device definition file exists
 if [ ! -f /etc/powerman/devices/apcpdu3.dev ]; then
@@ -305,10 +350,11 @@ for i in {1..30}; do
     
     # Check if process is still running
     if ! kill -0 ${POWERMAN_PID} 2>/dev/null; then
-        bashio::log.error "PowerMan process died unexpectedly!"
-        bashio::log.error "PowerMan log:"
-        tail -50 /var/log/powerman.log 2>/dev/null
-        exit 1
+    bashio::log.error "PowerMan process died unexpectedly!"
+    bashio::log.error "PowerMan log:"
+    tail -50 /var/log/powerman.log 2>/dev/null
+    # Do not hard-fail init; nut.sh will log and proceed
+    exit 0
     fi
     
     bashio::log.debug "Waiting for PowerMan... ($i/30)"
