@@ -7,8 +7,8 @@ if ! bashio::config.equals 'mode' 'netserver' ;then
     exec sleep 864000
 fi
 
-# Only start if powerman-pdu driver is configured
-if bashio::config.contains 'devices[].driver' 'powerman-pdu' ;then
+# Only start if PowerMan is enabled
+if bashio::config.has_value 'powerman_enabled' && bashio::config.true 'powerman_enabled' ;then
     bashio::log.info "Starting PowerMan daemon for PDU support..."
     exec powermand -f -c /etc/powerman/powerman.conf
 else

@@ -1,5 +1,8 @@
 # Network UPS Tools - PowerMan PDU Configuration Examples
 
+## Important: Schema Update
+Due to Home Assistant addon schema limitations, PowerMan configuration now uses a flat structure instead of nested objects.
+
 ## USB-connected UPS (standard configuration)
 ```yaml
 users:
@@ -50,16 +53,16 @@ devices:
     driver: powerman-pdu
     port: powerman://localhost:10101
     config: []
-    powerman_device: apc_rack_pdu
-powerman:
-  enabled: true
-  devices:
-    - name: apc_rack_pdu
-      type: apc
-      host: 192.168.51.124  # Your PDU IP
-      username: apc
-      password: apc
-      nodes: "outlet[1-8]"
+
+# PowerMan configuration (flat structure)
+powerman_enabled: true
+powerman_pdu_name: apc_rack_pdu
+powerman_pdu_type: apc
+powerman_pdu_host: 192.168.51.124
+powerman_pdu_username: apc
+powerman_pdu_password: apc
+powerman_pdu_nodes: "outlet[1-8]"
+
 mode: netserver
 shutdown_host: "false"
 ```
@@ -90,16 +93,16 @@ devices:
     driver: powerman-pdu
     port: powerman://localhost:10101
     config: []
-    powerman_device: apc_pdu1
-powerman:
-  enabled: true
-  devices:
-    - name: apc_pdu1
-      type: apc
-      host: 192.168.51.124
-      username: apc
-      password: apc
-      nodes: "outlet[1-8]"
+
+# PowerMan configuration (flat structure for single PDU)
+powerman_enabled: true
+powerman_pdu_name: apc_pdu1
+powerman_pdu_type: apc
+powerman_pdu_host: 192.168.51.124
+powerman_pdu_username: apc
+powerman_pdu_password: apc
+powerman_pdu_nodes: "outlet[1-8]"
+
 mode: netserver
 shutdown_host: "false"
 log_level: debug  # Use for troubleshooting
@@ -118,16 +121,16 @@ devices:
     driver: powerman-pdu
     port: powerman://localhost:10101
     config: []
-    powerman_device: ipmi_pdu1
-powerman:
-  enabled: true
-  devices:
-    - name: ipmi_pdu1
-      type: ipmipower
-      host: 192.168.1.100
-      username: admin
-      password: changeme
-      nodes: "outlet[1-8]"
+
+# PowerMan configuration (flat structure)
+powerman_enabled: true
+powerman_pdu_name: ipmi_pdu1
+powerman_pdu_type: ipmipower
+powerman_pdu_host: 192.168.1.100
+powerman_pdu_username: admin
+powerman_pdu_password: changeme
+powerman_pdu_nodes: "server[1-8]"
+
 mode: netserver
 shutdown_host: "false"
 ```
@@ -139,3 +142,4 @@ shutdown_host: "false"
 4. PowerMan support requires the addon to build and run powermand
 5. Use `log_level: debug` when troubleshooting connection issues
 6. The `shutdown_host` option determines if the entire Home Assistant host shuts down on UPS low battery
+7. **Current limitation**: Due to Home Assistant schema restrictions, only one PowerMan PDU can be configured through the UI. For multiple PDUs, manual configuration may be needed.

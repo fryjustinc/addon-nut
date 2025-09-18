@@ -52,18 +52,13 @@ schema:
       powervalue: int?
       config:
         - str
-      powerman_host: str?
-      powerman_port: int?
-      powerman_device: str?
-  powerman:
-    enabled: bool?
-    devices:
-      - name: str
-        type: str
-        host: str
-        username: str?
-        password: password?
-        nodes: str?
+  powerman_enabled: bool?
+  powerman_pdu_name: str?
+  powerman_pdu_type: str?
+  powerman_pdu_host: str?
+  powerman_pdu_username: str?
+  powerman_pdu_password: password?
+  powerman_pdu_nodes: str?
   mode: list(netserver|netclient)
   shutdown_host: bool
   list_usb_devices: bool?
