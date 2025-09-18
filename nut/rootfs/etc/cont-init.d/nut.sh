@@ -194,9 +194,24 @@ if bashio::config.equals 'mode' 'netserver' ;then
             # Ensure PowerMan will be used and set a sensible default port if not provided
             has_powerman=true
             bashio::log.info "Configuring ${upsname} with powerman-pdu driver"
+            # Default host:port
             if [[ -z "${upsport}" || "${upsport}" == "null" ]]; then
-                upsport="powerman://localhost:10101"
+                upsport="localhost:10101"
                 bashio::log.info "No port specified for ${upsname}, defaulting to ${upsport}"
+            fi
+            # Convert powerman:// URL formats to host:port expected by driver
+            if [[ "${upsport}" =~ ^powerman:// ]]; then
+                rest="${upsport#powerman://}"
+                # Strip optional user@ part
+                if [[ "${rest}" == *"@"* ]]; then
+                    rest="${rest#*@}"
+                fi
+                # If no port provided, default 10101
+                if [[ "${rest}" != *":"* ]]; then
+                    rest="${rest}:10101"
+                fi
+                bashio::log.info "Normalizing powerman URL to host:port: ${rest}"
+                upsport="${rest}"
             fi
         fi
         
@@ -208,6 +223,8 @@ if bashio::config.equals 'mode' 'netserver' ;then
             # Add helpful description
             if [[ "${upsdriver}" == "powerman-pdu" ]]; then
                 echo "  desc = \"APC PDU (PowerMan control)\""
+                # Use UPS name as PowerMan device name
+                echo "  username = ${upsname}"
             elif [[ "${upsdriver}" == "dummy-ups" ]]; then
                 echo "  mode = dummy"
                 echo "  desc = \"APC PDU via PowerMan (aggregated)\""
