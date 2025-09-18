@@ -223,8 +223,6 @@ if bashio::config.equals 'mode' 'netserver' ;then
             # Add helpful description
             if [[ "${upsdriver}" == "powerman-pdu" ]]; then
                 echo "  desc = \"APC PDU (PowerMan control)\""
-                # Use UPS name as PowerMan device name
-                echo "  username = ${upsname}"
             elif [[ "${upsdriver}" == "dummy-ups" ]]; then
                 echo "  mode = dummy"
                 echo "  desc = \"APC PDU via PowerMan (aggregated)\""
