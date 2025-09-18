@@ -36,7 +36,10 @@ RUN mkdir -p /usr/lib/nut \
     && echo "PowerMan driver search:" \
     && find / -name "powerman-pdu" 2>/dev/null | head -5 || true \
     && echo "NUT driver directory contents:" \
-    && ls -la /lib/nut/ 2>/dev/null | grep -E "(powerman|snmp)" || true
+    && ls -la /lib/nut/ 2>/dev/null | grep -E "(powerman|snmp)" || true \
+    && echo "PowerMan daemon check:" \
+    && which powermand || echo "powermand not in PATH" \
+    && ls -la /usr/sbin/powermand 2>/dev/null || echo "powermand not found in /usr/sbin"
 
 # Make scripts executable and fix permissions
 RUN chmod +x /usr/bin/notify \

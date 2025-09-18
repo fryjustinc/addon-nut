@@ -1,7 +1,7 @@
 #!/command/with-contenv bashio
 # ==============================================================================
 # Home Assistant Community Add-on: Network UPS Tools
-# Configure PowerMan for PDU support
+# Configure and START PowerMan for PDU support
 # ==============================================================================
 
 # Check if powerman is enabled or if we have powerman-pdu devices
@@ -110,6 +110,11 @@ for device in $(bashio::config "devices|keys"); do
         name=$(bashio::config "devices[${device}].name")
         port=$(bashio::config "devices[${device}].port")
         
+        # Skip if already configured explicitly
+        if bashio::config.has_value 'powerman_pdu_name' && [[ "$(bashio::config 'powerman_pdu_name')" == "${name}" ]]; then
+            continue
+        fi
+        
         bashio::log.info "Processing powerman-pdu device: ${name}"
         
         # Extract powerman configuration from device config
@@ -161,16 +166,33 @@ for device in $(bashio::config "devices|keys"); do
     fi
 done
 
-# Copy device definitions if they don't exist
+# Make sure the device definition file exists
 if [ ! -f /etc/powerman/devices/apcpdu3.dev ]; then
-    # Try to find the device files
+    bashio::log.info "APC PDU device definition not found, checking for existing files..."
+    
+    # Try to find existing device files
+    found_dev=false
     for dir in /usr/share/powerman /usr/local/share/powerman /etc/powerman; do
         if [ -d "${dir}" ] && [ -f "${dir}/apcpdu3.dev" ]; then
-            bashio::log.info "Copying PowerMan device definitions from ${dir}"
+            bashio::log.info "Found PowerMan device definitions in ${dir}, copying..."
             cp -n ${dir}/*.dev /etc/powerman/devices/ 2>/dev/null || true
+            found_dev=true
             break
         fi
     done
+    
+    # If still not found, check if it's in the root of /etc/powerman
+    if [ "${found_dev}" == "false" ] && [ -f /etc/powerman/apcpdu3.dev ]; then
+        bashio::log.info "Found apcpdu3.dev in /etc/powerman, moving to devices/"
+        mv /etc/powerman/apcpdu3.dev /etc/powerman/devices/ 2>/dev/null || true
+    fi
+    
+    # Final check
+    if [ -f /etc/powerman/devices/apcpdu3.dev ]; then
+        bashio::log.info "APC PDU device definition file is now in place"
+    else
+        bashio::log.error "Could not find or create APC PDU device definition!"
+    fi
 fi
 
 # Ensure powerman can write to its run directory
@@ -203,3 +225,63 @@ else
     bashio::log.error "PowerMan configuration file not created!"
     exit 1
 fi
+
+# START POWERMAN DAEMON NOW!
+bashio::log.info "Starting PowerMan daemon..."
+
+# Kill any existing powermand process
+pkill powermand 2>/dev/null || true
+sleep 1
+
+# Check if powermand binary exists
+if ! command -v powermand &>/dev/null; then
+    bashio::log.error "powermand binary not found!"
+    which powermand 2>&1 || bashio::log.error "powermand not in PATH"
+    find /usr -name powermand 2>/dev/null | head -5 || bashio::log.error "Cannot find powermand"
+    exit 1
+fi
+
+# Create log file
+touch /var/log/powerman.log
+chmod 644 /var/log/powerman.log
+
+# Start powermand in background with debug output
+bashio::log.info "Starting: /usr/sbin/powermand -d -c /etc/powerman/powerman.conf"
+/usr/sbin/powermand -d -c /etc/powerman/powerman.conf > /var/log/powerman.log 2>&1 &
+POWERMAN_PID=$!
+
+bashio::log.info "PowerMan daemon started with PID: ${POWERMAN_PID}"
+
+# Wait for PowerMan to be ready
+bashio::log.info "Waiting for PowerMan to be ready on port 10101..."
+for i in {1..30}; do
+    if nc -z localhost 10101 2>/dev/null; then
+        bashio::log.info "PowerMan is ready and listening on port 10101"
+        
+        # Test connection
+        if echo "quit" | nc localhost 10101 2>&1 | grep -q "powerman"; then
+            bashio::log.info "PowerMan is responding correctly"
+        fi
+        
+        # Create a flag file to indicate PowerMan is running
+        touch /var/run/powerman.ready
+        
+        exit 0
+    fi
+    bashio::log.debug "Waiting for PowerMan... ($i/30)"
+    sleep 1
+done
+
+# If we get here, PowerMan failed to start
+bashio::log.error "PowerMan failed to start within 30 seconds!"
+bashio::log.error "PowerMan log:"
+cat /var/log/powerman.log 2>/dev/null || bashio::log.error "No log file found"
+
+# Check if the process is still running
+if kill -0 ${POWERMAN_PID} 2>/dev/null; then
+    bashio::log.warning "PowerMan process is running but not responding on port 10101"
+else
+    bashio::log.error "PowerMan process died!"
+fi
+
+exit 1

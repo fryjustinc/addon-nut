@@ -1,0 +1,40 @@
+# Home Assistant NUT Addon Configuration for PowerMan PDU Support
+# This configuration includes both a UPS and PDU monitoring
+# 
+# IMPORTANT: Change the password below to something secure!
+# The default password triggers a security warning.
+
+users:
+  - username: homeassistant
+    password: "SecurePassword123!"  # CHANGE THIS!
+    instcmds:
+      - all
+    actions: []
+
+devices:
+  # APC Smart-UPS via SNMP
+  - name: smart_ups
+    driver: snmp-ups
+    port: 192.168.51.124
+    config: 
+      - mibs = apcc
+      - community = public
+  
+  # APC AP7900B PDU via PowerMan
+  - name: rack_pdu
+    driver: powerman-pdu
+    port: "powerman://rack_pdu@localhost:10101"
+    config: []
+
+# PowerMan Configuration
+powerman_enabled: true
+powerman_pdu_name: "rack_pdu"
+powerman_pdu_type: "apc7900b"
+powerman_pdu_host: "192.168.51.124"
+
+mode: netserver
+shutdown_host: "false"
+log_level: debug
+
+# Bypass password security check (use only for testing!)
+# i_like_to_be_pwned: true

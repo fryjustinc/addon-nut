@@ -46,18 +46,27 @@ done
 
 # Wait for PowerMan service if needed
 if [[ "${has_powerman}" == "true" ]]; then
-    bashio::log.info "Waiting for PowerMan service to be ready..."
-    for i in {1..30}; do
-        if nc -z localhost 10101 2>/dev/null; then
-            bashio::log.info "PowerMan is ready on port 10101"
-            break
-        fi
-        if [[ $i -eq 30 ]]; then
-            bashio::log.warning "PowerMan service not responding on port 10101 after 30 seconds"
-        else
-            sleep 1
-        fi
-    done
+    bashio::log.info "Checking if PowerMan is ready..."
+    if [ -f /var/run/powerman.ready ]; then
+        bashio::log.info "PowerMan is ready (flag file found)"
+    else
+        bashio::log.info "Waiting for PowerMan service to be ready..."
+        for i in {1..10}; do
+            if [ -f /var/run/powerman.ready ] || nc -z localhost 10101 2>/dev/null; then
+                bashio::log.info "PowerMan is ready on port 10101"
+                break
+            fi
+            if [[ $i -eq 10 ]]; then
+                bashio::log.error "PowerMan service not responding!"
+                bashio::log.info "Checking PowerMan process..."
+                ps aux | grep powermand | grep -v grep || bashio::log.error "PowerMan process not found!"
+                bashio::log.info "PowerMan log:"
+                tail -20 /var/log/powerman.log 2>/dev/null || bashio::log.error "No log file"
+            else
+                sleep 1
+            fi
+        done
+    fi
 fi
 
 if bashio::config.equals 'mode' 'netserver' ;then
