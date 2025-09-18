@@ -18,6 +18,7 @@ RUN \
         inetutils-telnet \
         netcat-openbsd \
         snmp \
+        bc \
         procps \
         net-tools \
         inetutils-ping \
@@ -53,6 +54,9 @@ RUN echo "Checking for NUT powerman-pdu driver..." \
 RUN chmod +x /usr/bin/notify \
     && chmod +x /usr/bin/test-powerman-direct 2>/dev/null || true \
     && chmod +x /usr/bin/manual-pdu-driver 2>/dev/null || true \
+    && chmod +x /usr/bin/pdu-control 2>/dev/null || true \
+    && chmod +x /usr/bin/pdu-command-handler 2>/dev/null || true \
+    && chmod +x /usr/bin/test-pdu-control 2>/dev/null || true \
     && chmod +x /usr/bin/shutdownhost \
     && chmod +x /usr/bin/test-powerman 2>/dev/null || true \
     && chmod +x /usr/bin/test-powerman-status 2>/dev/null || true \
@@ -69,6 +73,7 @@ RUN chmod +x /usr/bin/notify \
     && chmod +x /usr/bin/validate-powerman-config 2>/dev/null || true \
     && find /etc/services.d -name run -o -name finish | xargs chmod +x \
     && chmod +x /etc/cont-init.d/*.sh \
+    && chmod +x /etc/services.d/*/run /etc/services.d/*/finish 2>/dev/null || true \
     && rm -f /etc/cont-init.d/powerman.sh.old 2>/dev/null || true \
     && mkdir -p /var/run/nut \
     && chmod 0770 /var/run/nut

@@ -1,0 +1,87 @@
+#!/bin/bash
+# Test PDU control commands through Home Assistant
+
+echo "=================================="
+echo "PDU Control Test Script"
+echo "=================================="
+echo ""
+echo "This script tests PDU outlet control"
+echo ""
+
+# Check if upsc is working
+echo "1. Checking NUT status..."
+if upsc rack_pdu@localhost 2>/dev/null | grep -q "ups.status"; then
+    echo "✓ PDU is visible in NUT"
+else
+    echo "✗ PDU not found in NUT"
+    exit 1
+fi
+
+# Check available commands
+echo ""
+echo "2. Available commands:"
+upscmd -l rack_pdu@localhost 2>/dev/null | head -20
+
+# Test PowerMan directly
+echo ""
+echo "3. Testing PowerMan directly..."
+echo "Current outlet status:"
+echo "query rack_pdu" | nc -w 1 127.0.0.1 10101 2>/dev/null
+
+# Function to control outlet
+control_outlet() {
+    local action=$1
+    local outlet=$2
+    echo ""
+    echo "Sending: ${action} outlet ${outlet}..."
+    echo "${action} rack_pdu ${outlet}" | nc -w 2 127.0.0.1 10101 2>&1
+    sleep 2
+    echo "New status:"
+    echo "query rack_pdu" | nc -w 1 127.0.0.1 10101 2>/dev/null | grep "${outlet}="
+}
+
+# Interactive menu
+while true; do
+    echo ""
+    echo "=================================="
+    echo "PDU Outlet Control Menu"
+    echo "=================================="
+    echo "1. Turn outlet ON"
+    echo "2. Turn outlet OFF"
+    echo "3. Cycle outlet"
+    echo "4. Show all outlet status"
+    echo "5. Show current/power usage"
+    echo "0. Exit"
+    echo ""
+    read -p "Select option: " option
+    
+    case $option in
+        1|2|3)
+            read -p "Enter outlet number (1-8): " outlet
+            if [[ "${outlet}" =~ ^[1-8]$ ]]; then
+                case $option in
+                    1) control_outlet "on" "${outlet}" ;;
+                    2) control_outlet "off" "${outlet}" ;;
+                    3) control_outlet "cycle" "${outlet}" ;;
+                esac
+            else
+                echo "Invalid outlet number!"
+            fi
+            ;;
+        4)
+            echo "All outlets status:"
+            echo "query rack_pdu" | nc -w 1 127.0.0.1 10101 2>/dev/null
+            ;;
+        5)
+            echo "Current/Power usage:"
+            upsc rack_pdu@localhost 2>/dev/null | grep -E "(outlet\.[0-9]+\.(current|power)|outlet\.(current|power))"
+            ;;
+        0)
+            echo "Exiting..."
+            exit 0
+            ;;
+        *)
+            echo "Invalid option!"
+            ;;
+    esac
+done

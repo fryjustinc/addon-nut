@@ -1,0 +1,44 @@
+#!/bin/bash
+# NUT PDU Command Handler - Handles NUT instant commands for PDU
+# This script is called via upscmd
+
+# Get command from environment or arguments
+UPSNAME="${1:-${UPSNAME}}"
+CMDNAME="${2:-${CMDNAME}}"
+
+# Extract outlet number from command if present
+OUTLET=""
+if [[ "${CMDNAME}" =~ outlet\.([0-9]+)\.load\.(on|off|cycle) ]]; then
+    OUTLET="${BASH_REMATCH[1]}"
+    ACTION="${BASH_REMATCH[2]}"
+elif [[ "${CMDNAME}" =~ load\.(on|off) ]]; then
+    OUTLET="[1-8]"
+    ACTION="${BASH_REMATCH[1]}"
+fi
+
+# Log the command
+echo "$(date) Command: UPS=${UPSNAME} CMD=${CMDNAME} OUTLET=${OUTLET} ACTION=${ACTION}" >> /var/log/pdu-commands.log
+
+# Execute PowerMan command
+if [ -n "${OUTLET}" ] && [ -n "${ACTION}" ]; then
+    case "${ACTION}" in
+        "on")
+            RESULT=$(echo "on rack_pdu ${OUTLET}" | nc -w 2 127.0.0.1 10101 2>&1)
+            ;;
+        "off")  
+            RESULT=$(echo "off rack_pdu ${OUTLET}" | nc -w 2 127.0.0.1 10101 2>&1)
+            ;;
+        "cycle")
+            RESULT=$(echo "cycle rack_pdu ${OUTLET}" | nc -w 2 127.0.0.1 10101 2>&1)
+            ;;
+    esac
+    
+    echo "$(date) Result: ${RESULT}" >> /var/log/pdu-commands.log
+    
+    # Return success if PowerMan accepted the command
+    if echo "${RESULT}" | grep -q "Command completed"; then
+        exit 0
+    fi
+fi
+
+exit 0

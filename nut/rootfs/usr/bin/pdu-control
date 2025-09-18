@@ -1,0 +1,46 @@
+#!/bin/bash
+# PDU Control Script - Handles NUT instant commands for PDU outlets
+# Called by dummy-ups driver when instant commands are issued
+
+# Usage: pdu-control <command> <outlet>
+# Commands: on, off, cycle
+
+COMMAND="$1"
+OUTLET="$2"
+PDU_NAME="rack_pdu"
+
+# Log the command
+echo "$(date) PDU Control: Command=$COMMAND Outlet=$OUTLET" >> /var/log/pdu-control.log
+
+# Validate input
+if [ -z "$COMMAND" ] || [ -z "$OUTLET" ]; then
+    echo "Error: Missing command or outlet number"
+    exit 1
+fi
+
+# Send command to PowerMan
+case "$COMMAND" in
+    "on")
+        echo "on ${PDU_NAME} ${OUTLET}" | nc -w 2 127.0.0.1 10101 2>&1
+        ;;
+    "off")
+        echo "off ${PDU_NAME} ${OUTLET}" | nc -w 2 127.0.0.1 10101 2>&1
+        ;;
+    "cycle"|"reboot")
+        echo "cycle ${PDU_NAME} ${OUTLET}" | nc -w 2 127.0.0.1 10101 2>&1
+        ;;
+    "load.on")
+        # Special command for all outlets
+        echo "on ${PDU_NAME} [1-8]" | nc -w 2 127.0.0.1 10101 2>&1
+        ;;
+    "load.off")
+        # Special command for all outlets  
+        echo "off ${PDU_NAME} [1-8]" | nc -w 2 127.0.0.1 10101 2>&1
+        ;;
+    *)
+        echo "Error: Unknown command $COMMAND"
+        exit 1
+        ;;
+esac
+
+exit 0

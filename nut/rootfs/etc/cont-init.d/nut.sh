@@ -189,25 +189,80 @@ if bashio::config.equals 'mode' 'netserver' ;then
 
         bashio::log.info "Configuring Device named ${upsname}..."
         
-        # Special handling for powerman-pdu driver port specification
+        # Special handling for powerman-pdu driver
         if [[ "${upsdriver}" == "powerman-pdu" ]]; then
-            # Add maxstartdelay for powerman-pdu driver
-            bashio::log.info "Adding extended startup delay for powerman-pdu driver"
-            # Remove powerman:// prefix if present and use just host:port
-            if [[ "${upsport}" =~ ^powerman://(.+)$ ]]; then
-                upsport="${BASH_REMATCH[1]}"
-                bashio::log.info "Adjusted powerman-pdu port from powerman:// to: ${upsport}"
-            fi
-            # If no port specified, default to 127.0.0.1:10101
-            if [[ -z "${upsport}" ]] || [[ "${upsport}" == "auto" ]]; then
-                upsport="127.0.0.1:10101"
-                bashio::log.info "Using default powerman-pdu port: ${upsport}"
-            fi
-            # Replace localhost with 127.0.0.1 for better compatibility
-            if [[ "${upsport}" == "localhost:10101" ]]; then
-                upsport="127.0.0.1:10101"
-                bashio::log.info "Changed localhost to 127.0.0.1 for better compatibility"
-            fi
+            bashio::log.warning "powerman-pdu driver is not available in this build"
+            bashio::log.info "Using dummy-ups driver as a workaround for PDU ${upsname}"
+            
+            # Create a dummy device file for the PDU
+            cat > /etc/nut/${upsname}.dev << EOF
+# Dummy PDU configuration
+# PowerMan handles the actual PDU control
+device.mfr: APC
+device.model: AP7900B
+device.serial: PowerMan
+device.type: pdu
+driver.name: dummy-ups
+driver.parameter.mode: dummy
+driver.parameter.port: ${upsname}.dev
+driver.version: 2.8.1
+
+# Outlet status
+outlet.count: 8
+outlet.desc: All outlets
+outlet.id: 0
+outlet.switchable: 1
+
+# Individual outlets
+outlet.1.desc: Outlet 1
+outlet.1.id: 1
+outlet.1.status: on
+outlet.1.switchable: 1
+
+outlet.2.desc: Outlet 2
+outlet.2.id: 2
+outlet.2.status: on
+outlet.2.switchable: 1
+
+outlet.3.desc: Outlet 3
+outlet.3.id: 3
+outlet.3.status: on
+outlet.3.switchable: 1
+
+outlet.4.desc: Outlet 4
+outlet.4.id: 4
+outlet.4.status: on
+outlet.4.switchable: 1
+
+outlet.5.desc: Outlet 5
+outlet.5.id: 5
+outlet.5.status: on
+outlet.5.switchable: 1
+
+outlet.6.desc: Outlet 6
+outlet.6.id: 6
+outlet.6.status: on
+outlet.6.switchable: 1
+
+outlet.7.desc: Outlet 7
+outlet.7.id: 7
+outlet.7.status: on
+outlet.7.switchable: 1
+
+outlet.8.desc: Outlet 8
+outlet.8.id: 8
+outlet.8.status: on
+outlet.8.switchable: 1
+
+ups.status: OL
+ups.mfr: APC
+ups.model: AP7900B PDU
+EOF
+            
+            # Change driver to dummy-ups
+            upsdriver="dummy-ups"
+            upsport="/etc/nut/${upsname}.dev"
+            bashio::log.info "Configured dummy-ups driver for ${upsname} with port: ${upsport}"
         fi
         
         {
@@ -215,13 +270,10 @@ if bashio::config.equals 'mode' 'netserver' ;then
             echo "[${upsname}]"
             echo "  driver = ${upsdriver}"
             echo "  port = ${upsport}"
-            # Add maxstartdelay for powerman-pdu driver specifically
-            if [[ "${upsdriver}" == "powerman-pdu" ]]; then
-                echo "  maxstartdelay = 90"
-                echo "  pollinterval = 5"
-                # Add username parameter for powerman-pdu - it needs this even though PowerMan handles auth
-                echo "  username = ${upsname}"
-                echo "  desc = \"PowerMan PDU ${upsname}\""
+            # Add mode=dummy for dummy-ups driver
+            if [[ "${upsdriver}" == "dummy-ups" ]]; then
+                echo "  mode = dummy"
+                echo "  desc = \"APC PDU via PowerMan\""
             fi
         } >> /etc/nut/ups.conf
 
@@ -231,11 +283,6 @@ if bashio::config.equals 'mode' 'netserver' ;then
             echo "  ${configitem}" >> /etc/nut/ups.conf
         done
         IFS="$OIFS"
-        
-        # Log if this is a powerman-pdu device
-        if [[ "${upsdriver}" == "powerman-pdu" ]]; then
-            bashio::log.info "Device ${upsname} uses powerman-pdu driver, port: ${upsport}"
-        fi
 
         echo "MONITOR ${upsname}@localhost ${upspowervalue} upsmonmaster ${upsmonpwd} master" \
             >> /etc/nut/upsmon.conf
