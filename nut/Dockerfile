@@ -23,6 +23,10 @@ RUN \
 # Copy root filesystem
 COPY rootfs /
 
+# Create symlinks for powerman-pdu driver (installed in /lib/nut by Debian package)
+RUN mkdir -p /usr/lib/nut \
+    && ln -s /lib/nut/powerman-pdu /usr/lib/nut/powerman-pdu
+
 # Make scripts executable and fix permissions
 RUN chmod +x /usr/bin/notify \
     && chmod +x /usr/bin/shutdownhost \

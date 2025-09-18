@@ -1,0 +1,64 @@
+# APC AP7900B (8-outlet Switched Rack PDU) device definition for PowerMan
+# This file defines the protocol for communicating with APC AP7900B PDUs
+
+specification "apcpdu3" {
+    timeout 10.0
+    
+    plug name { "1" "2" "3" "4" "5" "6" "7" "8" }
+    
+    script login {
+        send "apc\r\n"
+        expect "Password  :"
+        send "apc\r\n"
+        expect "> "
+    }
+    
+    script logout {
+        send "quit\r\n"
+    }
+    
+    script status_all {
+        send "olStatus all\r\n"
+        expect "E000: Success\r\n"
+        foreachplug {
+            expect "([0-9]+): (On|Off): "
+            setplugstate $1 $2 on="On" off="Off"
+        }
+        expect "> "
+    }
+    
+    script on_ranged {
+        send "olOn "
+        foreachplug {
+            send "%s "
+        }
+        send "\r\n"
+        expect "E000: Success\r\n"
+        expect "> "
+    }
+    
+    script off_ranged {
+        send "olOff "
+        foreachplug {
+            send "%s "
+        }
+        send "\r\n"
+        expect "E000: Success\r\n"
+        expect "> "
+    }
+    
+    script cycle_ranged {
+        send "olReboot "
+        foreachplug {
+            send "%s "
+        }
+        send "\r\n"
+        expect "E000: Success\r\n"
+        expect "> "
+    }
+}
+
+# Device instance configuration
+# This will be replaced by actual configuration from addon config
+# device "apc_pdu" "apcpdu3" "telnet:pdu-hostname:23 |&"
+# node "outlet[1-8]" "apc_pdu"

@@ -35,45 +35,6 @@ options:
       config: []
   mode: netserver
   shutdown_host: "false"
-  # Example configurations (uncomment to use):
-  
-  # For USB-connected UPS:
-  # devices:
-  #   - name: myups
-  #     driver: usbhid-ups
-  #     port: auto
-  #     config: []
-  
-  # For APC Smart-UPS with Network Card (SNMP):
-  # devices:
-  #   - name: smart_ups
-  #     driver: snmp-ups
-  #     port: 192.168.1.50  # NMC2 IP address
-  #     config:
-  #       - community = "private"  # SNMP community
-  #       - snmp_version = "v1"   # or v2c, v3
-  
-  # For IPMI-based PDUs:
-  # powerman:
-  #   enabled: true
-  #   devices:
-  #     - name: pdu1
-  #       type: ipmipower
-  #       host: 192.168.1.100
-  #       username: admin
-  #       password: changeme
-  #       nodes: "outlet[1-8]"
-  
-  # For APC AP7900B (8-outlet switched PDU):
-  # powerman:
-  #   enabled: true
-  #   devices:
-  #     - name: apc_rack_pdu
-  #       type: apc
-  #       host: 192.168.1.75
-  #       username: apc
-  #       password: apc
-  #       nodes: "outlet[1-8]"
 schema:
   log_level: list(trace|debug|info|notice|warning|error|fatal)?
   users:
@@ -91,20 +52,18 @@ schema:
       powervalue: int?
       config:
         - str
-      # PowerMan specific options
       powerman_host: str?
       powerman_port: int?
       powerman_device: str?
-  # PowerMan configuration section
   powerman:
     enabled: bool?
     devices:
       - name: str
-        type: str  # e.g., ipmipower, baytech, apc, etc.
+        type: str
         host: str
         username: str?
         password: password?
-        nodes: str?  # Node mapping
+        nodes: str?
   mode: list(netserver|netclient)
   shutdown_host: bool
   list_usb_devices: bool?
