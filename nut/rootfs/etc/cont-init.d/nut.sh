@@ -27,6 +27,39 @@ if bashio::config.true 'list_usb_devices' ;then
     lsusb
 fi
 
+# Check if we need PowerMan (will be configured by powerman.sh init script)
+has_powerman=false
+if bashio::config.has_value 'powerman_enabled' && bashio::config.true 'powerman_enabled'; then
+    has_powerman=true
+    bashio::log.info "PowerMan is enabled"
+fi
+
+# Also check for powerman-pdu devices
+for device in $(bashio::config "devices|keys"); do
+    driver=$(bashio::config "devices[${device}].driver")
+    if [[ "${driver}" == "powerman-pdu" ]]; then
+        has_powerman=true
+        bashio::log.info "Found powerman-pdu device, PowerMan will be needed"
+        break
+    fi
+done
+
+# Wait for PowerMan service if needed
+if [[ "${has_powerman}" == "true" ]]; then
+    bashio::log.info "Waiting for PowerMan service to be ready..."
+    for i in {1..30}; do
+        if nc -z localhost 10101 2>/dev/null; then
+            bashio::log.info "PowerMan is ready on port 10101"
+            break
+        fi
+        if [[ $i -eq 30 ]]; then
+            bashio::log.warning "PowerMan service not responding on port 10101 after 30 seconds"
+        else
+            sleep 1
+        fi
+    done
+fi
+
 if bashio::config.equals 'mode' 'netserver' ;then
     bashio::log.info "Generating ${USERS_CONF}..."
 
@@ -101,76 +134,15 @@ if bashio::config.equals 'mode' 'netserver' ;then
         done
         IFS="$OIFS"
         
-        # Add PowerMan-specific configuration if using powerman-pdu driver
-        if bashio::config.equals "devices[${device}].driver" "powerman-pdu"; then
-            # Set default PowerMan connection if port not specified or is 'auto'
-            if ! bashio::config.has_value "devices[${device}].port" || bashio::config.equals "devices[${device}].port" "auto"; then
-                sed -i "s|port = auto|port = powerman://localhost:10101|g" /etc/nut/ups.conf
-            fi
-            
-            # Add PowerMan device mapping if specified
-            if bashio::config.has_value "devices[${device}].powerman_device"; then
-                pmdevice=$(bashio::config "devices[${device}].powerman_device")
-                echo "  pm_device = ${pmdevice}" >> /etc/nut/ups.conf
-            fi
+        # Log if this is a powerman-pdu device
+        if [[ "${upsdriver}" == "powerman-pdu" ]]; then
+            bashio::log.info "Device ${upsname} uses powerman-pdu driver, port: ${upsport}"
         fi
 
         echo "MONITOR ${upsname}@localhost ${upspowervalue} upsmonmaster ${upsmonpwd} master" \
             >> /etc/nut/upsmon.conf
     done
-
-    # Configure PowerMan if enabled
-    if bashio::config.has_value 'powerman_enabled' && bashio::config.true 'powerman_enabled'; then
-        bashio::log.info "Configuring PowerMan devices..."
-        
-        # Create PowerMan device configuration directory
-        mkdir -p /etc/powerman/devices
-        
-        if bashio::config.has_value 'powerman_pdu_name'; then
-            pduname=$(bashio::config 'powerman_pdu_name')
-            pdutype=$(bashio::config 'powerman_pdu_type')
-            pduhost=$(bashio::config 'powerman_pdu_host')
-            
-            bashio::log.info "Configuring PowerMan device: ${pduname}"
-            
-            # Generate device configuration based on type
-            case "${pdutype}" in
-                ipmipower)
-                    if bashio::config.has_value 'powerman_pdu_username'; then
-                        username=$(bashio::config 'powerman_pdu_username')
-                        password=$(bashio::config 'powerman_pdu_password')
-                        echo "device \"${pduname}\" \"ipmipower\" \"/usr/sbin/ipmipower -h ${pduhost} -u ${username} -p ${password} |&\"" > "/etc/powerman/devices/${pduname}.dev"
-                    fi
-                    ;;
-                baytech)
-                    echo "device \"${pduname}\" \"baytech\" \"${pduhost}:23\"" > "/etc/powerman/devices/${pduname}.dev"
-                    ;;
-                apc|apc7900b|ap7900b)
-                    # APC PDUs including AP7900B series
-                    if bashio::config.has_value 'powerman_pdu_username'; then
-                        username=$(bashio::config 'powerman_pdu_username')
-                        password=$(bashio::config 'powerman_pdu_password')
-                        # Use expect script for APC telnet authentication
-                        echo "device \"${pduname}\" \"apcpdu3\" \"${pduhost}:23|&\"" > "/etc/powerman/devices/${pduname}.dev"
-                        echo "login \"${username}\"" >> "/etc/powerman/devices/${pduname}.dev"
-                        echo "password \"${password}\"" >> "/etc/powerman/devices/${pduname}.dev"
-                    else
-                        echo "device \"${pduname}\" \"apcpdu3\" \"${pduhost}:23\"" > "/etc/powerman/devices/${pduname}.dev"
-                    fi
-                    ;;
-                *)
-                    bashio::log.warning "Unknown PowerMan device type: ${pdutype}"
-                    ;;
-            esac
-            
-            # Add node mapping if specified
-            if bashio::config.has_value 'powerman_pdu_nodes'; then
-                nodes=$(bashio::config 'powerman_pdu_nodes')
-                echo "node \"${nodes}\" \"${pduname}\"" >> "/etc/powerman/devices/${pduname}.dev"
-            fi
-        fi
-    fi
-
+    
     bashio::log.info "Starting the UPS drivers..."
     # Run upsdrvctl
     if bashio::debug; then

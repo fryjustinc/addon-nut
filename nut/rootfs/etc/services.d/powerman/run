@@ -3,14 +3,45 @@
 # Home Assistant Community Add-on: Network UPS Tools
 # Run PowerMan daemon for PDU support
 # ==============================================================================
+
+# Only run in netserver mode
 if ! bashio::config.equals 'mode' 'netserver' ;then
+    bashio::log.debug "Not in netserver mode, PowerMan not needed"
     exec sleep 864000
 fi
 
-# Only start if PowerMan is enabled
+# Check if we need PowerMan (either explicitly enabled or powerman-pdu devices exist)
+has_powerman=false
+
+# Check explicit enable flag
 if bashio::config.has_value 'powerman_enabled' && bashio::config.true 'powerman_enabled' ;then
-    bashio::log.info "Starting PowerMan daemon for PDU support..."
-    exec powermand -f -c /etc/powerman/powerman.conf
-else
+    has_powerman=true
+fi
+
+# Check for powerman-pdu devices
+for device in $(bashio::config "devices|keys"); do
+    driver=$(bashio::config "devices[${device}].driver")
+    if [[ "${driver}" == "powerman-pdu" ]]; then
+        has_powerman=true
+        break
+    fi
+done
+
+if [[ "${has_powerman}" == "false" ]]; then
+    bashio::log.debug "No PowerMan PDU devices configured, PowerMan daemon not needed"
     exec sleep 864000
 fi
+
+bashio::log.info "Starting PowerMan daemon for PDU support..."
+
+# Wait for configuration to be ready
+sleep 2
+
+# Check if powerman.conf exists
+if [ ! -f /etc/powerman/powerman.conf ]; then
+    bashio::log.error "PowerMan configuration file not found!"
+    exit 1
+fi
+
+# Start powerman in foreground mode
+exec powermand -f -c /etc/powerman/powerman.conf

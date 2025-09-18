@@ -1,0 +1,152 @@
+# Working Example Configurations
+
+## 1. SNMP Only (Simplest - Use This First!)
+
+```yaml
+users:
+  - username: "nutuser"
+    password: "changeme123"
+    instcmds:
+      - all
+    actions: []
+
+devices:
+  - name: apc_pdu
+    driver: snmp-ups
+    port: 192.168.51.124
+    config:
+      - community = private
+      - mibs = apcc
+
+mode: netserver
+shutdown_host: "false"
+```
+
+## 2. PowerMan Only (If You Need Outlet Control)
+
+```yaml
+users:
+  - username: "nutuser"
+    password: "changeme123"
+    instcmds:
+      - all
+    actions: []
+
+devices:
+  - name: rack_pdu
+    driver: powerman-pdu
+    port: powerman://localhost:10101
+    config: []
+
+powerman_enabled: true
+powerman_pdu_name: apc_pdu
+powerman_pdu_type: apc
+powerman_pdu_host: 192.168.51.124
+powerman_pdu_username: apc
+powerman_pdu_password: apc
+powerman_pdu_nodes: "outlet[1-8]"
+
+mode: netserver
+shutdown_host: "false"
+log_level: debug
+```
+
+## 3. Hybrid: SNMP + Dummy PowerMan (Avoids Error)
+
+If you want to keep PowerMan config but use SNMP:
+
+```yaml
+users:
+  - username: "nutuser"
+    password: "changeme123"
+    instcmds:
+      - all
+    actions: []
+
+devices:
+  - name: apc_pdu
+    driver: snmp-ups
+    port: 192.168.51.124
+    config:
+      - community = private
+      - mibs = apcc
+
+# PowerMan disabled but config present (no errors)
+powerman_enabled: false
+powerman_pdu_name: apc_pdu
+powerman_pdu_type: apc
+powerman_pdu_host: 192.168.51.124
+powerman_pdu_username: apc
+powerman_pdu_password: apc
+powerman_pdu_nodes: "outlet[1-8]"
+
+mode: netserver
+shutdown_host: "false"
+```
+
+## 4. USB UPS + SNMP PDU (Common Setup)
+
+```yaml
+users:
+  - username: "nutuser"
+    password: "changeme123"
+    instcmds:
+      - all
+    actions: []
+
+devices:
+  # USB-connected UPS
+  - name: main_ups
+    driver: usbhid-ups
+    port: auto
+    config: []
+    
+  # SNMP-connected PDU
+  - name: apc_pdu
+    driver: snmp-ups
+    port: 192.168.51.124
+    config:
+      - community = private
+      - mibs = apcc
+
+mode: netserver
+shutdown_host: "false"
+```
+
+## Which Configuration to Use?
+
+1. **Start with #1 (SNMP Only)** - It's already working based on your logs
+2. **Use #2 (PowerMan)** only if you need individual outlet control
+3. **Use #3 (Hybrid)** if you want to prepare for PowerMan later
+4. **Use #4 (USB+SNMP)** if you have both UPS and PDU
+
+## Copy This Script to Test
+
+Save as `test_config.sh` and run on Home Assistant:
+
+```bash
+#!/bin/bash
+echo "Testing NUT configuration..."
+
+# Check if SNMP works
+echo "Testing SNMP..."
+snmpget -v1 -c private 192.168.51.124 sysDescr.0 2>/dev/null && echo "✓ SNMP works!" || echo "✗ SNMP failed"
+
+# Check if addon is running
+echo ""
+echo "Checking addon..."
+docker ps | grep -q addon_local_nut && echo "✓ Addon running" || echo "✗ Addon not running"
+
+# List detected devices
+echo ""
+echo "Detected devices:"
+docker exec addon_local_nut upsc -l 2>/dev/null || echo "No devices found"
+
+# Get device status
+echo ""
+echo "Device status:"
+for dev in $(docker exec addon_local_nut upsc -l 2>/dev/null); do
+    echo "=== $dev ==="
+    docker exec addon_local_nut upsc $dev 2>/dev/null | grep -E "device.mfr|device.model|ups.status" || echo "No data"
+done
+```

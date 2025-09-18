@@ -1,0 +1,92 @@
+#!/command/with-contenv bashio
+# ==============================================================================
+# Home Assistant Community Add-on: Network UPS Tools
+# Test script for PowerMan PDU connectivity
+# ==============================================================================
+
+bashio::log.info "PowerMan PDU Connection Test"
+bashio::log.info "============================"
+
+# Check if PowerMan is configured
+if ! bashio::config.has_value 'powerman_enabled' || ! bashio::config.true 'powerman_enabled'; then
+    bashio::log.warning "PowerMan is not enabled in configuration"
+    exit 1
+fi
+
+# Check if PowerMan daemon is running
+if pgrep powermand > /dev/null; then
+    bashio::log.info "✓ PowerMan daemon is running"
+else
+    bashio::log.error "✗ PowerMan daemon is NOT running"
+    bashio::log.info "Attempting to start PowerMan..."
+    /usr/sbin/powermand -c /etc/powerman/powerman.conf &
+    sleep 3
+fi
+
+# Check if PowerMan is listening on port 10101
+if nc -z localhost 10101 2>/dev/null; then
+    bashio::log.info "✓ PowerMan is listening on port 10101"
+else
+    bashio::log.error "✗ PowerMan is NOT listening on port 10101"
+fi
+
+# Show PowerMan configuration
+bashio::log.info ""
+bashio::log.info "PowerMan configuration:"
+if [ -f /etc/powerman/powerman.conf ]; then
+    cat /etc/powerman/powerman.conf | grep -E "^(device|node|listen)" | while IFS= read -r line; do
+        bashio::log.info "  ${line}"
+    done
+else
+    bashio::log.error "PowerMan configuration file not found!"
+fi
+
+# Test PowerMan client connection
+bashio::log.info ""
+bashio::log.info "Testing PowerMan client connection..."
+if command -v powerman &>/dev/null; then
+    # List all configured devices
+    bashio::log.info "Configured devices:"
+    powerman -h localhost:10101 -l 2>&1 | while IFS= read -r line; do
+        bashio::log.info "  ${line}"
+    done
+    
+    # Query device status
+    bashio::log.info ""
+    bashio::log.info "Querying device status:"
+    powerman -h localhost:10101 -q 2>&1 | while IFS= read -r line; do
+        bashio::log.info "  ${line}"
+    done
+else
+    bashio::log.warning "PowerMan client not available"
+fi
+
+# Check PowerMan logs
+bashio::log.info ""
+bashio::log.info "Recent PowerMan logs:"
+if [ -f /var/log/powerman.log ]; then
+    tail -20 /var/log/powerman.log | while IFS= read -r line; do
+        bashio::log.info "  ${line}"
+    done
+fi
+
+# Test NUT driver
+bashio::log.info ""
+bashio::log.info "Testing NUT powerman-pdu driver..."
+for device in $(bashio::config "devices|keys"); do
+    driver=$(bashio::config "devices[${device}].driver")
+    if [[ "${driver}" == "powerman-pdu" ]]; then
+        name=$(bashio::config "devices[${device}].name")
+        bashio::log.info "Testing device: ${name}"
+        
+        # Try to query the device via NUT
+        if upsc "${name}@localhost" 2>&1 | head -10; then
+            bashio::log.info "✓ Device ${name} is responding via NUT"
+        else
+            bashio::log.error "✗ Device ${name} is NOT responding via NUT"
+        fi
+    fi
+done
+
+bashio::log.info ""
+bashio::log.info "Test complete!"

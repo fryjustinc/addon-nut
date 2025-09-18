@@ -16,6 +16,7 @@ RUN \
         usbutils=1:018-2 \
         expect \
         telnet \
+        netcat-openbsd \
         snmp \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
@@ -37,6 +38,7 @@ RUN mkdir -p /usr/lib/nut \
 RUN chmod +x /usr/bin/notify \
     && chmod +x /usr/bin/shutdownhost \
     && chmod +x /usr/bin/test-powerman 2>/dev/null || true \
+    && chmod +x /usr/bin/test-powerman-pdu 2>/dev/null || true \
     && chmod +x /usr/bin/test-apc-ap7900b 2>/dev/null || true \
     && chmod +x /usr/bin/test-snmp-ups 2>/dev/null || true \
     && chmod +x /etc/services.d/*/run \
