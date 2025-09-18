@@ -95,10 +95,11 @@ if bashio::config.has_value 'powerman_pdu_name' && \
     
     # Add node configuration
     if [[ -n "${pdu_nodes}" ]]; then
-        echo "node \"${pdu_nodes}\" \"${pdu_name}\" \"1-8\"" >> /etc/powerman/powerman.conf
+        echo "node \"${pdu_nodes}\" \"${pdu_name}\"" >> /etc/powerman/powerman.conf
     else
         # Default node configuration for 8-outlet PDU
-        echo "node \"outlet[1-8]\" \"${pdu_name}\" \"1-8\"" >> /etc/powerman/powerman.conf
+        # APC PDUs use simple numeric plug names: 1, 2, 3, etc.
+        echo "node \"[1-8]\" \"${pdu_name}\"" >> /etc/powerman/powerman.conf
     fi
 fi
 
@@ -155,13 +156,13 @@ for device in $(bashio::config "devices|keys"); do
             else
                 echo "device \"${name}\" \"${pdu_type}\" \"${pdu_dev}\"" >> /etc/powerman/powerman.conf
             fi
-            echo "node \"outlet[1-8]\" \"${name}\" \"1-8\"" >> /etc/powerman/powerman.conf
+            echo "node \"[1-8]\" \"${name}\"" >> /etc/powerman/powerman.conf
         else
             bashio::log.warning "PDU device ${name} missing connection info"
             # Try a default configuration for testing with telnet for APC AP7900B
             bashio::log.info "Attempting default telnet configuration for ${name}"
             echo "device \"${name}\" \"apcpdu3\" \"telnet:192.168.51.124:23 |&\"" >> /etc/powerman/powerman.conf
-            echo "node \"outlet[1-8]\" \"${name}\" \"1-8\"" >> /etc/powerman/powerman.conf
+            echo "node \"[1-8]\" \"${name}\"" >> /etc/powerman/powerman.conf
         fi
     fi
 done
@@ -201,15 +202,11 @@ chmod 755 /var/run/powerman
 
 bashio::log.info "PowerMan configuration complete"
 
-# Show the configuration for debugging
-if bashio::debug; then
-    bashio::log.debug "PowerMan configuration:"
-    cat /etc/powerman/powerman.conf | while IFS= read -r line; do
-        bashio::log.debug "  ${line}"
-    done
-else
-    bashio::log.info "PowerMan config file written to /etc/powerman/powerman.conf"
-fi
+# Show the configuration
+bashio::log.info "PowerMan configuration:"
+cat /etc/powerman/powerman.conf | while IFS= read -r line; do
+    bashio::log.info "  Config: ${line}"
+done
 
 # Verify the configuration file exists and is readable
 if [ -f /etc/powerman/powerman.conf ]; then
@@ -230,7 +227,12 @@ fi
 bashio::log.info "Starting PowerMan daemon..."
 
 # Kill any existing powermand process
-pkill powermand 2>/dev/null || true
+if command -v pkill &>/dev/null; then
+    pkill powermand 2>/dev/null || true
+else
+    # Fallback if pkill is not available
+    killall powermand 2>/dev/null || true
+fi
 sleep 1
 
 # Check if powermand binary exists
@@ -245,7 +247,7 @@ fi
 touch /var/log/powerman.log
 chmod 644 /var/log/powerman.log
 
-# Start powermand in background with debug output
+# Start powermand in foreground mode (daemon mode) with debug output for troubleshooting
 bashio::log.info "Starting: /usr/sbin/powermand -d -c /etc/powerman/powerman.conf"
 /usr/sbin/powermand -d -c /etc/powerman/powerman.conf > /var/log/powerman.log 2>&1 &
 POWERMAN_PID=$!
@@ -255,7 +257,27 @@ bashio::log.info "PowerMan daemon started with PID: ${POWERMAN_PID}"
 # Wait for PowerMan to be ready
 bashio::log.info "Waiting for PowerMan to be ready on port 10101..."
 for i in {1..30}; do
-    if nc -z localhost 10101 2>/dev/null; then
+    # Try multiple methods to check if port is open
+    port_open=false
+    
+    # Method 1: Use nc if available
+    if command -v nc &>/dev/null; then
+        if nc -z localhost 10101 2>/dev/null; then
+            port_open=true
+        fi
+    # Method 2: Use telnet if available
+    elif command -v telnet &>/dev/null; then
+        if timeout 1 telnet localhost 10101 2>&1 | grep -q "Connected"; then
+            port_open=true
+        fi
+    # Method 3: Use bash tcp redirect
+    else
+        if timeout 1 bash -c "echo > /dev/tcp/localhost/10101" 2>/dev/null; then
+            port_open=true
+        fi
+    fi
+    
+    if [[ "${port_open}" == "true" ]]; then
         bashio::log.info "PowerMan is ready and listening on port 10101"
         
         # Test connection
@@ -275,7 +297,13 @@ done
 # If we get here, PowerMan failed to start
 bashio::log.error "PowerMan failed to start within 30 seconds!"
 bashio::log.error "PowerMan log:"
-cat /var/log/powerman.log 2>/dev/null || bashio::log.error "No log file found"
+if [ -f /var/log/powerman.log ]; then
+    cat /var/log/powerman.log | while IFS= read -r line; do
+        bashio::log.error "  Log: ${line}"
+    done
+else
+    bashio::log.error "No log file found"
+fi
 
 # Check if the process is still running
 if kill -0 ${POWERMAN_PID} 2>/dev/null; then

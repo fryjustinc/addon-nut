@@ -18,6 +18,7 @@ RUN \
         telnet \
         netcat-openbsd \
         snmp \
+        procps \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
@@ -49,6 +50,7 @@ RUN chmod +x /usr/bin/notify \
     && chmod +x /usr/bin/test-apc-ap7900b 2>/dev/null || true \
     && chmod +x /usr/bin/test-snmp-ups 2>/dev/null || true \
     && chmod +x /usr/bin/cleanup-old-files 2>/dev/null || true \
+    && chmod +x /usr/bin/validate-powerman-config 2>/dev/null || true \
     && chmod +x /etc/services.d/*/run \
     && chmod +x /etc/services.d/*/finish \
     && chmod +x /etc/cont-init.d/*.sh \

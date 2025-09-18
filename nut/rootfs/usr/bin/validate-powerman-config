@@ -1,0 +1,59 @@
+#!/command/with-contenv bashio
+# ==============================================================================
+# Home Assistant Community Add-on: Network UPS Tools
+# Validate PowerMan configuration
+# ==============================================================================
+
+bashio::log.info "PowerMan Configuration Validator"
+bashio::log.info "================================"
+
+# Check if configuration file exists
+if [ ! -f /etc/powerman/powerman.conf ]; then
+    bashio::log.error "PowerMan configuration file not found!"
+    exit 1
+fi
+
+# Check if device definition exists
+if [ ! -f /etc/powerman/devices/apcpdu3.dev ]; then
+    bashio::log.error "APC PDU device definition not found!"
+    exit 1
+fi
+
+bashio::log.info "Configuration file contents:"
+bashio::log.info "----------------------------"
+cat /etc/powerman/powerman.conf | while IFS= read -r line; do
+    bashio::log.info "  ${line}"
+done
+
+bashio::log.info ""
+bashio::log.info "Checking configuration syntax..."
+
+# Try to parse the config with powermand in check mode (if it supports it)
+if /usr/sbin/powermand -c /etc/powerman/powerman.conf -s 2>&1 | head -1 | grep -q "error"; then
+    bashio::log.error "Configuration has syntax errors!"
+    /usr/sbin/powermand -c /etc/powerman/powerman.conf -s 2>&1 | while IFS= read -r line; do
+        bashio::log.error "  ${line}"
+    done
+    exit 1
+else
+    bashio::log.info "Configuration syntax appears valid"
+fi
+
+bashio::log.info ""
+bashio::log.info "Testing telnet connectivity to PDU..."
+# Get the PDU host from config
+pdu_host=$(grep "telnet:" /etc/powerman/powerman.conf | head -1 | sed 's/.*telnet:\([^:]*\).*/\1/')
+if [ -n "${pdu_host}" ]; then
+    bashio::log.info "Testing connection to ${pdu_host}:23..."
+    if timeout 5 bash -c "echo quit | telnet ${pdu_host} 23 2>&1" | grep -q "Connected"; then
+        bashio::log.info "✓ Telnet connection successful"
+    else
+        bashio::log.warning "✗ Cannot connect via telnet to ${pdu_host}:23"
+        bashio::log.warning "  Make sure telnet is enabled on your PDU"
+    fi
+else
+    bashio::log.warning "No telnet PDU host found in configuration"
+fi
+
+bashio::log.info ""
+bashio::log.info "Validation complete!"

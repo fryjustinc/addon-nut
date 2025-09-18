@@ -1,0 +1,64 @@
+# Home Assistant NUT Addon Configuration for PowerMan PDU Support
+# Complete working configuration for APC Smart-UPS + APC AP7900B PDU
+
+users:
+  - username: homeassistant
+    password: "StrongP@ssw0rd2024!"  # Use a secure password
+    instcmds:
+      - all
+    actions: []
+
+devices:
+  # APC Smart-UPS via SNMP
+  - name: smart_ups
+    driver: snmp-ups
+    port: 192.168.51.124
+    config: 
+      - mibs = apcc
+      - community = public
+  
+  # APC AP7900B PDU via PowerMan
+  - name: rack_pdu
+    driver: powerman-pdu
+    port: "powerman://localhost:10101"  # Note: no device name needed here
+    config: []
+
+# PowerMan Configuration
+powerman_enabled: true
+powerman_pdu_name: "rack_pdu"
+powerman_pdu_type: "apc7900b"
+powerman_pdu_host: "192.168.51.124"
+
+mode: netserver
+shutdown_host: "false"
+log_level: info
+
+# If you get password security warnings, you can either:
+# 1. Use a strong password (recommended)
+# 2. Uncomment the line below to bypass the check (NOT recommended for production)
+# i_like_to_be_pwned: true
+
+# IMPORTANT NOTES:
+# 
+# 1. TELNET ACCESS: Your APC AP7900B must have telnet enabled.
+#    - Access the PDU web interface
+#    - Go to Network -> Telnet/SSH
+#    - Enable Telnet
+#    - Default credentials are usually apc/apc
+#
+# 2. NETWORK: Ensure the addon can reach the PDU on port 23 (telnet)
+#
+# 3. TESTING: After starting the addon, test from the terminal:
+#    - Test telnet: telnet 192.168.51.124
+#    - Test PowerMan: /usr/bin/test-powerman-pdu
+#    - List devices: upsc -l
+#    - Query PDU: upsc rack_pdu@localhost
+#
+# 4. HOME ASSISTANT INTEGRATION:
+#    After the addon starts successfully:
+#    - Go to Settings -> Devices & Services
+#    - Add the NUT integration
+#    - Host: a0d7b954-nut (or the addon hostname)
+#    - Port: 3493
+#    - Username: homeassistant
+#    - Password: (your password above)
