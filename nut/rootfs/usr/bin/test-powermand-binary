@@ -1,0 +1,61 @@
+#!/command/with-contenv bashio
+# ==============================================================================
+# Home Assistant Community Add-on: Network UPS Tools
+# Simple test script for PowerMan binary
+# ==============================================================================
+
+echo "=== PowerMan Binary Test ==="
+echo ""
+
+# Check if powermand exists
+echo "1. Checking for powermand binary..."
+if command -v powermand &>/dev/null; then
+    echo "✓ powermand found at: $(which powermand)"
+else
+    echo "✗ powermand not found in PATH"
+    echo "Searching filesystem..."
+    find /usr -name powermand 2>/dev/null | head -5
+fi
+
+echo ""
+echo "2. Checking powermand version and help..."
+powermand --version 2>&1 || echo "Version command failed"
+echo ""
+powermand --help 2>&1 | head -20 || echo "Help command failed"
+
+echo ""
+echo "3. Checking library dependencies..."
+ldd $(which powermand) 2>&1 | head -20 || echo "ldd check failed"
+
+echo ""
+echo "4. Testing configuration file syntax..."
+if [ -f /etc/powerman/powerman.conf ]; then
+    echo "Configuration file exists"
+    echo "Content:"
+    cat /etc/powerman/powerman.conf
+    echo ""
+    echo "Testing config syntax with powermand -c:"
+    powermand -c /etc/powerman/powerman.conf -l 2>&1 | head -20 || echo "Config test failed"
+else
+    echo "✗ Configuration file not found"
+fi
+
+echo ""
+echo "5. Checking device definition file..."
+if [ -f /etc/powerman/devices/apcpdu3.dev ]; then
+    echo "✓ apcpdu3.dev found"
+    echo "First 30 lines:"
+    head -30 /etc/powerman/devices/apcpdu3.dev
+else
+    echo "✗ apcpdu3.dev not found"
+    echo "Checking alternate locations..."
+    find /etc/powerman /usr/share/powerman -name "*.dev" 2>/dev/null | head -10
+fi
+
+echo ""
+echo "6. Testing PowerMan startup (will timeout after 5 seconds)..."
+echo "Starting powermand in foreground with debug output..."
+timeout 5 powermand -F -D -c /etc/powerman/powerman.conf 2>&1 || echo "PowerMan test completed/timed out"
+
+echo ""
+echo "=== End PowerMan Binary Test ==="

@@ -7,17 +7,5 @@ if ! bashio::config.equals 'mode' 'netserver' ;then
     exec sleep 864000
 fi
 
-# If PowerMan is enabled, wait for it to be ready
-if bashio::config.has_value 'powerman_enabled' && bashio::config.true 'powerman_enabled' ;then
-    bashio::log.info "Waiting for PowerMan to be ready..."
-    for i in {1..30}; do
-        if nc -z localhost 10101 2>/dev/null; then
-            bashio::log.info "PowerMan is ready"
-            break
-        fi
-        sleep 1
-    done
-fi
-
 bashio::log.info "Starting the UPS information server..."
 exec upsd -D -u root

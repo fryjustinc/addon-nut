@@ -223,8 +223,8 @@ else
     exit 1
 fi
 
-# PowerMan will be started by s6 service manager
-bashio::log.info "PowerMan configuration complete. Service will be started by s6..."
+# Start PowerMan directly (s6 service management seems problematic)
+bashio::log.info "Starting PowerMan daemon..."
 
 # Check if powermand binary exists
 if ! command -v powermand &>/dev/null; then
@@ -234,13 +234,73 @@ if ! command -v powermand &>/dev/null; then
     exit 1
 fi
 
+# Kill any existing powermand process
+if command -v pkill &>/dev/null; then
+    pkill powermand 2>/dev/null || true
+else
+    killall powermand 2>/dev/null || true
+fi
+sleep 1
+
 # Create log file
 touch /var/log/powerman.log
 chmod 644 /var/log/powerman.log
 
-# Create a flag file to indicate PowerMan should be started
-touch /var/run/powerman.configured
+# Start PowerMan in daemon mode
+bashio::log.info "Starting PowerMan with command: powermand -c /etc/powerman/powerman.conf"
+powermand -c /etc/powerman/powerman.conf 2>&1 | tee -a /var/log/powerman.log &
+POWERMAN_PID=$!
 
-bashio::log.info "PowerMan configuration ready, service will start shortly..."
+bashio::log.info "PowerMan started with PID: ${POWERMAN_PID}"
 
-exit 0
+# Wait for PowerMan to be ready
+bashio::log.info "Waiting for PowerMan to be ready on port 10101..."
+for i in {1..30}; do
+    if nc -z localhost 10101 2>/dev/null || nc -z 127.0.0.1 10101 2>/dev/null; then
+        bashio::log.info "PowerMan is ready and listening on port 10101"
+        
+        # Test connection
+        if echo "help" | nc -w 1 localhost 10101 2>&1 | grep -q "powerman"; then
+            bashio::log.info "PowerMan is responding correctly"
+        else
+            bashio::log.warning "PowerMan is listening but may not be fully ready"
+        fi
+        
+        # Create a flag file to indicate PowerMan is running
+        touch /var/run/powerman.ready
+        
+        # Save PID for monitoring
+        echo ${POWERMAN_PID} > /var/run/powerman.pid
+        
+        bashio::log.info "PowerMan successfully started and ready"
+        exit 0
+    fi
+    
+    # Check if process is still running
+    if ! kill -0 ${POWERMAN_PID} 2>/dev/null; then
+        bashio::log.error "PowerMan process died unexpectedly!"
+        bashio::log.error "PowerMan log:"
+        tail -50 /var/log/powerman.log 2>/dev/null
+        exit 1
+    fi
+    
+    bashio::log.debug "Waiting for PowerMan... ($i/30)"
+    sleep 1
+done
+
+# If we get here, PowerMan isn't responding
+bashio::log.error "PowerMan failed to become ready within 30 seconds!"
+bashio::log.error "PowerMan log:"
+tail -50 /var/log/powerman.log 2>/dev/null
+
+# Check if the process is still running
+if kill -0 ${POWERMAN_PID} 2>/dev/null; then
+    bashio::log.warning "PowerMan process is running but not responding on port 10101"
+    # Let it continue anyway, maybe it needs more time
+    touch /var/run/powerman.ready
+    echo ${POWERMAN_PID} > /var/run/powerman.pid
+    exit 0
+else
+    bashio::log.error "PowerMan process died!"
+    exit 1
+fi
