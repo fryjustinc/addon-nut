@@ -16,6 +16,7 @@ RUN \
         usbutils=1:018-2 \
         expect \
         inetutils-telnet \
+        openssh-client \
         netcat-openbsd \
         snmp \
         bc \
