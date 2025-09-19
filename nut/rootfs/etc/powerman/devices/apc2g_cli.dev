@@ -1,0 +1,42 @@
+# APC RPDU2G (AP79xxB/AP8xxx 2G) CLI-driven specification for PowerMan
+# Uses SSH interactive CLI (apc> prompt). Expects username prompt handled by ssh,
+# password prompt matched here, and final prompt 'apc>'.
+
+specification "apc2g_cli" {
+    timeout 25.0
+
+    plug name { "1" "2" "3" "4" "5" "6" "7" "8" }
+
+    script login {
+        # First-connection hostkey prompt (may appear)
+        expect "(yes/no)" ; send "yes\r"
+        # Password prompt (case-insensitive)
+        expect "(?i)password:" ; send "apc\r"
+        # Wait for CLI prompt
+        expect "apc>"
+    }
+
+    script logout { send "exit\r" }
+
+    # Query each outlet deterministically using CLI
+    script status {
+        # Ensure we are at prompt
+        expect "apc>"
+
+        send "olStatus 1\r" ; expect "1 *: *(On|Off)" ; setplugstate 1 $1 on="On" off="Off" ; expect "apc>"
+        send "olStatus 2\r" ; expect "2 *: *(On|Off)" ; setplugstate 2 $1 on="On" off="Off" ; expect "apc>"
+        send "olStatus 3\r" ; expect "3 *: *(On|Off)" ; setplugstate 3 $1 on="On" off="Off" ; expect "apc>"
+        send "olStatus 4\r" ; expect "4 *: *(On|Off)" ; setplugstate 4 $1 on="On" off="Off" ; expect "apc>"
+        send "olStatus 5\r" ; expect "5 *: *(On|Off)" ; setplugstate 5 $1 on="On" off="Off" ; expect "apc>"
+        send "olStatus 6\r" ; expect "6 *: *(On|Off)" ; setplugstate 6 $1 on="On" off="Off" ; expect "apc>"
+        send "olStatus 7\r" ; expect "7 *: *(On|Off)" ; setplugstate 7 $1 on="On" off="Off" ; expect "apc>"
+        send "olStatus 8\r" ; expect "8 *: *(On|Off)" ; setplugstate 8 $1 on="On" off="Off" ; expect "apc>"
+    }
+
+    # Control actions map to CLI commands
+    script on     { send "olOn %1\r"     ; expect "apc>" }
+    script off    { send "olOff %1\r"    ; expect "apc>" }
+    script cycle  { send "olReboot %1\r" ; expect "apc>" }
+}
+
+
