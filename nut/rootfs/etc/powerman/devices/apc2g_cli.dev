@@ -8,12 +8,19 @@ specification "apc2g_cli" {
     plug name { "1" "2" "3" "4" "5" "6" "7" "8" }
 
     script login {
-        # Handle either username or password or already-logged-in prompt
-        expect "(User Name|Username|Login|Password|apc>)"
+        # Wake the session to trigger prompts
+        send "\r"
+        delay 0.2
+        send "\r"
+        delay 0.2
+        # Match either user, password, or prompt
+        expect "(User Name *:|Username *:|Login *:|Password *:|apc>)"
         send "apc\r"
-        expect "(Password|apc>)"
+        # If we just sent username, expect password; if already at prompt, this will match immediately
+        expect "(Password *:|apc>)"
         send "apc\r"
-        expect "apc>"
+        # Final prompt
+        expect "(apc>|APC>)"
     }
 
     script logout {
@@ -22,7 +29,9 @@ specification "apc2g_cli" {
 
     # Query each outlet deterministically using CLI
     script status {
-        expect "apc>"
+        # Ensure prompt
+        send "\r"
+        expect "(apc>|APC>)"
 
         send "olStatus 1\r"
         expect "([0-9]+).*: *(On|Off)"
