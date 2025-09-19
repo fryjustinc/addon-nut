@@ -96,7 +96,7 @@ if bashio::config.has_value 'powerman_pdu_name' && \
             if [[ -z "${pdu_username}" ]]; then pdu_username="apc"; fi
             # Use StrictHostKeyChecking=no to avoid interactivity on first connect
             echo "include \"/etc/powerman/devices/apc2g_cli.dev\"" >> /etc/powerman/powerman.conf
-            echo "device \"${pdu_name}\" \"apc2g_cli\" \"|ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ${pdu_username}@${pdu_host} |&\"" >> /etc/powerman/powerman.conf
+            echo "device \"${pdu_name}\" \"apc2g_cli\" \"|ssh -tt -o PreferredAuthentications=password -o PubkeyAuthentication=no -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ${pdu_username}@${pdu_host} |&\"" >> /etc/powerman/powerman.conf
             ;;
         "apc"|"apcpdu"|"apc7900"|"apc7900b"|"apc7920"|"apc7940"|"apc8959")
             # APC PDUs via telnet
@@ -194,7 +194,7 @@ for device in $(bashio::config "devices|keys"); do
                 bashio::log.info "Adding APC 2G PDU via SSH: ${name}"
                 pdu_user_dev=${pdu_user_dev:-apc}
                 echo "include \"/etc/powerman/devices/apc2g_cli.dev\"" >> /etc/powerman/powerman.conf
-                echo "device \"${name}\" \"apc2g_cli\" \"|ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ${pdu_user_dev}@${pdu_dev} |&\"" >> /etc/powerman/powerman.conf
+                echo "device \"${name}\" \"apc2g_cli\" \"|ssh -tt -o PreferredAuthentications=password -o PubkeyAuthentication=no -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ${pdu_user_dev}@${pdu_dev} |&\"" >> /etc/powerman/powerman.conf
             elif [[ "${pdu_type}" == "apc"* ]]; then
                 bashio::log.info "Adding APC PDU device via telnet: ${name}"
                 echo "device \"${name}\" \"apcpdu3\" \"|${TELNET_CMD} ${pdu_dev} 23 |&\"" >> /etc/powerman/powerman.conf
