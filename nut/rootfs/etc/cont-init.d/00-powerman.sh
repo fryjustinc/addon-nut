@@ -91,12 +91,10 @@ if bashio::config.has_value 'powerman_pdu_name' && \
     # Build device command based on PDU type
     case "${pdu_type}" in
         "apc2g"|"apc_rpdu2g"|"apc_cli")
-            # APC RPDU2G via SSH CLI (apc> prompt)
-            bashio::log.info "Configuring APC 2G PDU via SSH CLI"
-            if [[ -z "${pdu_username}" ]]; then pdu_username="apc"; fi
-            # Use StrictHostKeyChecking=no to avoid interactivity on first connect
+            # APC RPDU2G via CLI over telnet (apc> prompt)
+            bashio::log.info "Configuring APC 2G PDU via telnet CLI"
             echo "include \"/etc/powerman/devices/apc2g_cli.dev\"" >> /etc/powerman/powerman.conf
-            echo "device \"${pdu_name}\" \"apc2g_cli\" \"|ssh -tt -o PreferredAuthentications=password -o PubkeyAuthentication=no -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ${pdu_username}@${pdu_host} |&\"" >> /etc/powerman/powerman.conf
+            echo "device \"${pdu_name}\" \"apc2g_cli\" \"|${TELNET_CMD} ${pdu_host} 23 |&\"" >> /etc/powerman/powerman.conf
             ;;
         "apc"|"apcpdu"|"apc7900"|"apc7900b"|"apc7920"|"apc7940"|"apc8959")
             # APC PDUs via telnet
@@ -191,10 +189,9 @@ for device in $(bashio::config "devices|keys"); do
             bashio::log.info "Adding PDU device to PowerMan: ${name} (${pdu_type} at ${pdu_dev})"
             # For APC PDUs, use telnet connection
             if [[ "${pdu_type}" == "apc2g" || "${pdu_type}" == "apc_rpdu2g" || "${pdu_type}" == "apc_cli" ]]; then
-                bashio::log.info "Adding APC 2G PDU via SSH: ${name}"
-                pdu_user_dev=${pdu_user_dev:-apc}
+                bashio::log.info "Adding APC 2G PDU via telnet: ${name}"
                 echo "include \"/etc/powerman/devices/apc2g_cli.dev\"" >> /etc/powerman/powerman.conf
-                echo "device \"${name}\" \"apc2g_cli\" \"|ssh -tt -o PreferredAuthentications=password -o PubkeyAuthentication=no -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ${pdu_user_dev}@${pdu_dev} |&\"" >> /etc/powerman/powerman.conf
+                echo "device \"${name}\" \"apc2g_cli\" \"|${TELNET_CMD} ${pdu_dev} 23 |&\"" >> /etc/powerman/powerman.conf
             elif [[ "${pdu_type}" == "apc"* ]]; then
                 bashio::log.info "Adding APC PDU device via telnet: ${name}"
                 echo "device \"${name}\" \"apcpdu3\" \"|${TELNET_CMD} ${pdu_dev} 23 |&\"" >> /etc/powerman/powerman.conf

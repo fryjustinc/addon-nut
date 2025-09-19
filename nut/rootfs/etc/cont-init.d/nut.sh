@@ -194,30 +194,24 @@ if bashio::config.equals 'mode' 'netserver' ;then
             # Ensure PowerMan will be used and set a sensible default port if not provided
             has_powerman=true
             bashio::log.info "Configuring ${upsname} with powerman-pdu driver"
-            # Default host:port with device selector
+            # Default host:port only (powerman-pdu expects host:port)
             if [[ -z "${upsport}" || "${upsport}" == "null" ]]; then
-                upsport="${upsname}@localhost:10101"
+                upsport="localhost:10101"
                 bashio::log.info "No port specified for ${upsname}, defaulting to ${upsport}"
             fi
-            # Convert powerman:// URL formats to device@host:port expected by driver
+            # Convert powerman:// URL formats to host:port expected by driver
             if [[ "${upsport}" =~ ^powerman:// ]]; then
                 rest="${upsport#powerman://}"
-                device_part="${upsname}"
-                hostport_part="${rest}"
+                # Strip optional user@ part
                 if [[ "${rest}" == *"@"* ]]; then
-                    device_part="${rest%@*}"
-                    hostport_part="${rest#*@}"
+                    rest="${rest#*@}"
                 fi
-                if [[ "${hostport_part}" != *":"* ]]; then
-                    hostport_part="${hostport_part}:10101"
+                # If no port provided, default 10101
+                if [[ "${rest}" != *":"* ]]; then
+                    rest="${rest}:10101"
                 fi
-                upsport="${device_part}@${hostport_part}"
-                bashio::log.info "Normalizing powerman URL to device@host:port: ${upsport}"
-            else
-                # If port lacks device prefix, add upsname@
-                if [[ "${upsport}" != *"@"* ]]; then
-                    upsport="${upsname}@${upsport}"
-                fi
+                upsport="${rest}"
+                bashio::log.info "Normalizing powerman URL to host:port: ${upsport}"
             fi
         fi
         
